@@ -1,6 +1,6 @@
 import os
-from typing import List
 import json
+from typing import List
 
 from langchain_openai import ChatOpenAI
 from langchain.agents import Tool, create_react_agent, AgentExecutor
@@ -11,7 +11,6 @@ from models import PlanItem, LogCompletedInput, RunSQLInput
 
 # Setup LLM
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "test")
-
 llm = ChatOpenAI(model="gpt-4-1106-preview", temperature=0.0)
 
 def create_agent():
