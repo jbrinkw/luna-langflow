@@ -2,3 +2,5 @@ __pycache__/
 workout.db
 .env
 sample_workout.db
+node_modules/
+dist/
