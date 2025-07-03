@@ -1,67 +1,58 @@
 import os
-import sqlite3
-import uuid
-from datetime import datetime, date
+import json
+from typing import List
 
-DB_PATH = os.environ.get("WORKOUT_DB", "workout.db")
+from langchain_openai import ChatOpenAI
+from langchain.agents import Tool, create_react_agent, AgentExecutor
+from langchain import hub
 
-# Connection helper
-def get_connection():
-    conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
-    conn.row_factory = sqlite3.Row
-    return conn
+import tools
+from models import PlanItem, LogCompletedInput, RunSQLInput
 
-# Initialize database with schema
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS exercises (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE NOT NULL
-);
+# Setup LLM
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "test")
+llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0.0)
 
-CREATE TABLE IF NOT EXISTS daily_logs (
-    id TEXT PRIMARY KEY,
-    log_date DATE NOT NULL UNIQUE,
-    summary TEXT
-);
+def create_agent():
+    tool_list: List[Tool] = [
+        Tool(
+            name="get_today_plan",
+            func=lambda _: str(tools.get_today_plan()),
+            description="Retrieve today's planned sets as a list"
+        ),
+        Tool(
+            name="log_completed_set",
+            func=lambda input: str(tools.log_completed_set(**LogCompletedInput.model_validate_json(input).dict())),
+            description="Log a completed set. Input JSON with exercise, reps, load"
+        ),
+        Tool(
+            name="new_daily_plan",
+            func=lambda input: str(tools.new_daily_plan([p.dict() for p in [PlanItem(**item) for item in json.loads(input)]])),
+            description="Create today's plan. Input JSON list of {exercise, order, reps, load}"
+        ),
+        Tool(
+            name="update_summary",
+            func=lambda input: tools.update_summary(input),
+            description="Update today's summary with provided text"
+        ),
+        Tool(
+            name="get_recent_history",
+            func=lambda input: str(tools.get_recent_history(int(input))),
+            description="Get history for last N days"
+        ),
+        Tool(
+            name="run_sql",
+            func=lambda input: str(tools.run_sql(**RunSQLInput.model_validate_json(input).dict())),
+            description="Run arbitrary SELECT query. Provide JSON {query, params?, confirm?}"
+        ),
+        Tool(
+            name="arbitrary_update",
+            func=lambda input: str(tools.arbitrary_update(**RunSQLInput.model_validate_json(input).model_dump(exclude={"confirm"}))),
+            description="Run arbitrary UPDATE/INSERT/DELETE SQL. Input JSON {query, params}"
+        ),
+    ]
 
-CREATE TABLE IF NOT EXISTS planned_sets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    log_id TEXT REFERENCES daily_logs(id) ON DELETE CASCADE,
-    exercise_id INTEGER REFERENCES exercises(id),
-    order_num INTEGER NOT NULL,
-    reps INTEGER NOT NULL,
-    load REAL NOT NULL
-);
-CREATE INDEX IF NOT EXISTS ix_planned_order ON planned_sets (log_id, order_num);
-
-CREATE TABLE IF NOT EXISTS completed_sets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    log_id TEXT REFERENCES daily_logs(id) ON DELETE CASCADE,
-    exercise_id INTEGER REFERENCES exercises(id),
-    reps_done INTEGER,
-    load_done REAL,
-    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS ix_completed_time ON completed_sets (log_id, completed_at);
-"""
-
-
-def init_db():
-    if os.path.exists(DB_PATH):
-        os.remove(DB_PATH)
-    conn = get_connection()
-    conn.executescript(SCHEMA)
-    conn.commit()
-    conn.close()
-
-
-def get_today_log_id(conn):
-    today = date.today().isoformat()
-    cur = conn.execute("SELECT id FROM daily_logs WHERE log_date = ?", (today,))
-    row = cur.fetchone()
-    if row:
-        return row[0]
-    log_id = str(uuid.uuid4())
-    conn.execute("INSERT INTO daily_logs (id, log_date) VALUES (?, ?)", (log_id, today))
-    conn.commit()
-    return log_id
+    prompt = hub.pull("hwchase17/react")
+    agent = create_react_agent(llm, tool_list, prompt)
+    executor = AgentExecutor(agent=agent, tools=tool_list, verbose=True)
+    return executor

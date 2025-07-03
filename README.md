@@ -10,8 +10,11 @@ This demo shows a simple LangChain agent connected to a SQLite database for trac
 2. Set an `OPENAI_API_KEY` environment variable for the agent.
 
 ## Running Tests
-Execute the test script which resets the database and exercises each tool via the agent:
+There are two test scripts. Each one sends natural language prompts so the agent chooses the right tools:
+
 ```bash
-python test_agent.py
+python test_tools.py       # exercises all dedicated tools
+python test_arbitrary.py   # demonstrates the arbitrary_update escape hatch
 ```
-The script prints agent interactions and resulting database rows.
+
+Run `demo_chat.py` to interact with the agent in a simple console chat.
