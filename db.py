@@ -3,6 +3,7 @@ import sqlite3
 import uuid
 from datetime import datetime, date
 
+# Database configuration
 DB_PATH = os.environ.get("WORKOUT_DB", "workout.db")
 
 # Connection helper

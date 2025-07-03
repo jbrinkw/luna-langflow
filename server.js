@@ -1,12 +1,17 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const db = require('./db');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-db.initDb(true);
+// Serve static files from the current directory
+app.use(express.static('.'));
+
+// Initialize database schema (without sample data)
+db.initDb(false);
 
 app.get('/api/days', (req, res) => {
   res.json(db.getAllDays());
@@ -19,18 +24,18 @@ app.post('/api/days', (req, res) => {
 });
 
 app.delete('/api/days/:id', (req, res) => {
-  db.deleteDay(Number(req.params.id));
+  db.deleteDay(req.params.id);
   res.json({ ok: true });
 });
 
 app.get('/api/days/:id', (req, res) => {
-  const data = db.getDay(Number(req.params.id));
+  const data = db.getDay(req.params.id);
   if (!data) return res.status(404).end();
   res.json(data);
 });
 
 app.post('/api/days/:id/plan', (req, res) => {
-  const id = db.addPlan(Number(req.params.id), req.body);
+  const id = db.addPlan(req.params.id, req.body);
   res.json({ id });
 });
 
@@ -45,7 +50,7 @@ app.delete('/api/plan/:id', (req, res) => {
 });
 
 app.post('/api/days/:id/completed', (req, res) => {
-  const id = db.addCompleted(Number(req.params.id), req.body);
+  const id = db.addCompleted(req.params.id, req.body);
   res.json({ id });
 });
 
@@ -60,8 +65,13 @@ app.delete('/api/completed/:id', (req, res) => {
 });
 
 app.put('/api/days/:id/summary', (req, res) => {
-  db.updateSummary(Number(req.params.id), req.body.summary || '');
+  db.updateSummary(req.params.id, req.body.summary || '');
   res.json({ ok: true });
+});
+
+// Serve the React app for the root route
+app.get('/', (req, res) => {
+  res.sendFile(path.resolve(__dirname, 'index.html'));
 });
 
 const PORT = process.env.PORT || 3001;

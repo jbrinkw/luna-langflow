@@ -6,31 +6,28 @@ function initDb(sample = false) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS exercises (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE
+      name TEXT UNIQUE NOT NULL
     );
     CREATE TABLE IF NOT EXISTS daily_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      log_date TEXT UNIQUE,
+      id TEXT PRIMARY KEY,
+      log_date DATE NOT NULL UNIQUE,
       summary TEXT
     );
     CREATE TABLE IF NOT EXISTS planned_sets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      log_id INTEGER,
-      exercise_id INTEGER,
-      order_num INTEGER,
-      reps INTEGER,
-      load REAL,
-      FOREIGN KEY(log_id) REFERENCES daily_logs(id) ON DELETE CASCADE,
-      FOREIGN KEY(exercise_id) REFERENCES exercises(id)
+      log_id TEXT REFERENCES daily_logs(id) ON DELETE CASCADE,
+      exercise_id INTEGER REFERENCES exercises(id),
+      order_num INTEGER NOT NULL,
+      reps INTEGER NOT NULL,
+      load REAL NOT NULL
     );
     CREATE TABLE IF NOT EXISTS completed_sets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      log_id INTEGER,
-      exercise_id INTEGER,
+      log_id TEXT REFERENCES daily_logs(id) ON DELETE CASCADE,
+      exercise_id INTEGER REFERENCES exercises(id),
       reps_done INTEGER,
       load_done REAL,
-      FOREIGN KEY(log_id) REFERENCES daily_logs(id) ON DELETE CASCADE,
-      FOREIGN KEY(exercise_id) REFERENCES exercises(id)
+      completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
@@ -53,8 +50,17 @@ function getExerciseId(name) {
 function ensureDay(dateStr) {
   const row = db.prepare('SELECT id FROM daily_logs WHERE log_date=?').get(dateStr);
   if (row) return row.id;
-  const info = db.prepare("INSERT INTO daily_logs (log_date, summary) VALUES (?, '')").run(dateStr);
-  return info.lastInsertRowid;
+  const logId = generateUuid();
+  db.prepare("INSERT INTO daily_logs (id, log_date, summary) VALUES (?, ?, '')").run(logId, dateStr);
+  return logId;
+}
+
+function generateUuid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
 }
 
 function getAllDays() {

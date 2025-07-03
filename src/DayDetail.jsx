@@ -2,13 +2,35 @@ import React, { useEffect, useState } from 'react';
 
 export default function DayDetail({ id, onBack }) {
   const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [newPlan, setNewPlan] = useState({ exercise: '', reps: 0, load: 0, order_num: 1 });
   const [newComp, setNewComp] = useState({ exercise: '', reps_done: 0, load_done: 0 });
 
-  const load = () => fetch(`/api/days/${id}`).then(r => r.json()).then(setData);
+  const load = () => {
+    setLoading(true);
+    setError(null);
+    fetch(`/api/days/${id}`)
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then(data => {
+        setData(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Error loading day data:', err);
+        setError(err.message);
+        setLoading(false);
+      });
+  };
+  
   useEffect(load, [id]);
 
-  if (!data) return 'Loading...';
+  if (loading) return <div><button onClick={onBack}>Back</button><p>Loading day details...</p></div>;
+  if (error) return <div><button onClick={onBack}>Back</button><p>Error loading day: {error}</p></div>;
+  if (!data) return <div><button onClick={onBack}>Back</button><p>No data found for this day.</p></div>;
 
   const addPlan = async () => {
     await fetch(`/api/days/${id}/plan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newPlan) });
@@ -50,10 +72,6 @@ export default function DayDetail({ id, onBack }) {
     <div>
       <button onClick={onBack}>Back</button>
       <h3>{data.log.log_date}</h3>
-      <div>
-        <h4>Summary</h4>
-        <textarea value={data.log.summary || ''} onChange={e => setData({ ...data, log: { ...data.log, summary: e.target.value } })} onBlur={updateSummary} />
-      </div>
       <div>
         <h4>Planned Sets</h4>
         <table border="1" cellPadding="4">
@@ -99,6 +117,17 @@ export default function DayDetail({ id, onBack }) {
             </tr>
           </tbody>
         </table>
+      </div>
+      <div>
+        <h4>Summary</h4>
+        <textarea 
+          rows="3" 
+          cols="50"
+          placeholder="Add workout summary..."
+          value={data.log.summary || ''} 
+          onChange={e => setData({ ...data, log: { ...data.log, summary: e.target.value } })} 
+          onBlur={updateSummary} 
+        />
       </div>
     </div>
   );
