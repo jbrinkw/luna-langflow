@@ -1,5 +1,6 @@
 import db
 from agent import create_agent
+from agents import Runner
 
 
 def main():
@@ -10,9 +11,10 @@ def main():
         user_input = input("You: ")
         if user_input.strip().lower() in {"quit", "exit"}:
             break
-        result = agent.invoke({"input": user_input})
-        print(result.get("output"))
+        result = Runner.run_sync(agent, user_input)
+        print(result.final_output)
 
 
 if __name__ == "__main__":
     main()
+

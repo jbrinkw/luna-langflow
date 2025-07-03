@@ -1,6 +1,6 @@
 # CoachByte Agent Demo
 
-This demo shows a simple LangChain agent connected to a SQLite database for tracking workouts. Tools mirror the planned production API.
+This demo shows a simple agent built with the OpenAI Agents SDK connected to a SQLite database for tracking workouts. Tools mirror the planned production API.
 
 ## Setup
 1. Install requirements:
@@ -17,5 +17,4 @@ python test_tools.py       # exercises all dedicated tools
 python test_arbitrary.py   # demonstrates the arbitrary_update escape hatch
 ```
 
-Run `demo_chat.py` to interact with the agent in a simple console chat.
-
+Run `demo_chat.py` to interact with the agent in a simple console chat powered by the OpenAI Agents SDK.

@@ -3,6 +3,7 @@ from datetime import date, timedelta
 import sqlite3
 
 from db import get_connection, get_today_log_id
+from agents import function_tool
 
 # Helper validation
 MAX_LOAD = 2000
@@ -18,6 +19,7 @@ def _get_exercise_id(conn: sqlite3.Connection, name: str) -> int:
     return cur.lastrowid
 
 
+@function_tool(strict_mode=False)
 def new_daily_plan(items: List[Dict[str, Any]]):
     """Create today's daily log and planned sets"""
     conn = get_connection()
@@ -42,7 +44,9 @@ def new_daily_plan(items: List[Dict[str, Any]]):
     return f"planned {len(items)} sets for today"
 
 
+@function_tool(strict_mode=False)
 def get_today_plan() -> List[Dict[str, Any]]:
+    """Return today's planned sets in workout order."""
     conn = get_connection()
     try:
         log_id = get_today_log_id(conn)
@@ -56,7 +60,9 @@ def get_today_plan() -> List[Dict[str, Any]]:
     return rows
 
 
+@function_tool(strict_mode=False)
 def log_completed_set(exercise: str, reps: int, load: float):
+    """Record a completed set for today."""
     if not (1 <= reps <= MAX_REPS):
         raise ValueError("reps out of range")
     if not (0 <= load <= MAX_LOAD):
@@ -75,7 +81,9 @@ def log_completed_set(exercise: str, reps: int, load: float):
     return "logged"
 
 
+@function_tool(strict_mode=False)
 def update_summary(text: str):
+    """Update today's daily log summary."""
     conn = get_connection()
     try:
         log_id = get_today_log_id(conn)
@@ -86,7 +94,9 @@ def update_summary(text: str):
     return "summary updated"
 
 
+@function_tool(strict_mode=False)
 def get_recent_history(days: int) -> List[Dict[str, Any]]:
+    """Return planned and completed sets for the last ``days`` calendar days."""
     conn = get_connection()
     try:
         start = date.today() - timedelta(days=days)
@@ -108,6 +118,7 @@ def get_recent_history(days: int) -> List[Dict[str, Any]]:
     return rows
 
 
+@function_tool(strict_mode=False)
 def run_sql(query: str, params: Dict[str, Any] = None, confirm: bool = False):
     """Run arbitrary SQL. Reject mutations unless confirm=True"""
     params = params or {}
@@ -127,5 +138,17 @@ def run_sql(query: str, params: Dict[str, Any] = None, confirm: bool = False):
     return rows
 
 
+@function_tool(strict_mode=False)
 def arbitrary_update(query: str, params: Dict[str, Any] = None):
+    """Execute a confirmed SQL statement for updates or inserts."""
     return run_sql(query, params=params, confirm=True)
+
+__all__ = [
+    "new_daily_plan",
+    "get_today_plan",
+    "log_completed_set",
+    "update_summary",
+    "get_recent_history",
+    "run_sql",
+    "arbitrary_update",
+]
