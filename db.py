@@ -46,13 +46,59 @@ CREATE INDEX IF NOT EXISTS ix_completed_time ON completed_sets (log_id, complete
 """
 
 
-def init_db():
+def init_db(sample: bool = False):
+    """Create a new database. If sample=True, populate with demo data."""
     if os.path.exists(DB_PATH):
         os.remove(DB_PATH)
     conn = get_connection()
     conn.executescript(SCHEMA)
+    if sample:
+        populate_sample_data(conn)
     conn.commit()
     conn.close()
+
+
+def populate_sample_data(conn: sqlite3.Connection):
+    today = date.today().isoformat()
+    log_id = str(uuid.uuid4())
+    conn.execute("INSERT INTO daily_logs (id, log_date, summary) VALUES (?, ?, '')", (log_id, today))
+
+    def add_ex(name):
+        cur = conn.execute("INSERT INTO exercises (name) VALUES (?) RETURNING id", (name,))
+        return cur.fetchone()[0]
+
+    bench = add_ex("bench press")
+    squat = add_ex("squat")
+    deadlift = add_ex("deadlift")
+
+    planned = [
+        (bench, 1, 10, 45),
+        (bench, 2, 8, 65),
+        (bench, 3, 5, 85),
+        (squat, 4, 10, 95),
+        (squat, 5, 8, 135),
+        (squat, 6, 5, 185),
+        (deadlift, 7, 5, 135),
+        (deadlift, 8, 5, 185),
+        (deadlift, 9, 3, 225),
+    ]
+    for ex_id, order_num, reps, load in planned:
+        conn.execute(
+            "INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES (?, ?, ?, ?, ?)",
+            (log_id, ex_id, order_num, reps, load),
+        )
+
+    completed = [
+        (bench, 1, 10, 45),
+        (bench, 2, 8, 65),
+        (squat, 4, 10, 95),
+        (deadlift, 7, 5, 135),
+    ]
+    for ex_id, order_num, reps, load in completed:
+        conn.execute(
+            "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done, completed_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
+            (log_id, ex_id, reps, load),
+        )
 
 
 def get_today_log_id(conn):
