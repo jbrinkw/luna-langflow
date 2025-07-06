@@ -29,6 +29,7 @@ DROP TABLE IF EXISTS completed_sets CASCADE;
 DROP TABLE IF EXISTS planned_sets CASCADE;
 DROP TABLE IF EXISTS daily_logs CASCADE;
 DROP TABLE IF EXISTS exercises CASCADE;
+DROP TABLE IF EXISTS timer CASCADE;
 
 CREATE TABLE exercises (
     id SERIAL PRIMARY KEY,
@@ -60,6 +61,12 @@ CREATE TABLE completed_sets (
     completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS ix_completed_time ON completed_sets (log_id, completed_at);
+
+CREATE TABLE timer (
+    id SERIAL PRIMARY KEY,
+    timer_end_time TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 

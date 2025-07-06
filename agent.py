@@ -27,6 +27,8 @@ def create_agent() -> Agent:
             "\n- Query workout data using run_sql"
             "\n- Update workout summaries using update_summary"
             "\n- Make database modifications using arbitrary_update"
+            "\n- Set workout timers using set_timer (specify duration in minutes)"
+            "\n- Check timer status using get_timer"
             "\n\nImportant notes:"
             "\n- User messages include timestamps in format [YYYY-MM-DD HH:MM:SS]. Always acknowledge when you can see these timestamps."
             "\n- Maintain conversation context - if asked a follow-up question, refer back to previous responses in the conversation."
@@ -42,6 +44,8 @@ def create_agent() -> Agent:
             tools.get_recent_history,
             tools.run_sql,
             tools.arbitrary_update,
+            tools.set_timer,
+            tools.get_timer,
         ],
         model=MODEL,
     )

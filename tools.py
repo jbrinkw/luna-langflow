@@ -1,5 +1,5 @@
 from typing import List, Dict, Any, Optional
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 import psycopg2.extras
 
 from db import get_connection, get_today_log_id
@@ -160,6 +160,78 @@ def arbitrary_update(query: str, params: Optional[Dict[str, Any]] = None):
         params = {}
     return run_sql(query, params=params, confirm=True)
 
+
+@function_tool(strict_mode=False)
+def set_timer(minutes: int):
+    """Set a workout timer for the specified number of minutes."""
+    if not (1 <= minutes <= 180):  # Max 3 hours
+        raise ValueError("Timer duration must be between 1 and 180 minutes")
+    
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        # Clear any existing timers first
+        cur.execute("DELETE FROM timer")
+        
+        # Calculate end time
+        end_time = datetime.now() + timedelta(minutes=minutes)
+        
+        # Insert new timer
+        cur.execute(
+            "INSERT INTO timer (timer_end_time) VALUES (%s)",
+            (end_time,)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    
+    return f"Timer set for {minutes} minutes (until {end_time.strftime('%H:%M:%S')})"
+
+
+@function_tool(strict_mode=False)
+def get_timer() -> Dict[str, Any]:
+    """Get current timer status - shows remaining time or if timer has expired."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT timer_end_time, created_at FROM timer ORDER BY created_at DESC LIMIT 1"
+        )
+        row = cur.fetchone()
+        
+        if not row:
+            return {"status": "no_timer", "message": "No timer currently set"}
+        
+        end_time = row['timer_end_time']
+        created_at = row['created_at']
+        now = datetime.now()
+        
+        if now >= end_time:
+            # Timer has expired
+            time_expired = int((now - end_time).total_seconds())
+            return {
+                "status": "expired",
+                "message": f"Timer expired {time_expired} seconds ago",
+                "end_time": end_time.isoformat(),
+                "created_at": created_at.isoformat()
+            }
+        else:
+            # Timer is still running
+            remaining_seconds = int((end_time - now).total_seconds())
+            remaining_minutes = remaining_seconds // 60
+            remaining_seconds = remaining_seconds % 60
+            
+            return {
+                "status": "running",
+                "message": f"Timer running - {remaining_minutes}:{remaining_seconds:02d} remaining",
+                "remaining_seconds": int((end_time - now).total_seconds()),
+                "end_time": end_time.isoformat(),
+                "created_at": created_at.isoformat()
+            }
+    finally:
+        conn.close()
+
+
 __all__ = [
     "new_daily_plan",
     "get_today_plan",
@@ -168,4 +240,6 @@ __all__ = [
     "get_recent_history",
     "run_sql",
     "arbitrary_update",
+    "set_timer",
+    "get_timer",
 ]
