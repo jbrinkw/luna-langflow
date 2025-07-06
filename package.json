@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "start": "node server.js",
-    "load-sample": "node load_sample_data.js",
+    "load-sample": "python load_sample_data.py",
     "dev-all": "concurrently \"npm start\" \"npm run dev\""
   },
   "keywords": [],

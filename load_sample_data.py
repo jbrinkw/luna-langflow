@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Load sample data into PostgreSQL database.
-This is the Python equivalent of load_sample_data.js
+Load comprehensive sample data into PostgreSQL database.
+This creates 3 days of MMA-focused workout data (July 2-4, 2025).
 """
 
 import uuid
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from datetime import datetime, timedelta
+from datetime import date, timedelta
 import db_config
 
 
@@ -28,9 +28,9 @@ def get_connection():
     )
 
 
-def load_sample_data():
-    """Load sample data into the database"""
-    print("Loading sample data...")
+def load_comprehensive_sample_data():
+    """Load comprehensive 3-day MMA workout sample data"""
+    print("Loading comprehensive 3-day MMA workout sample data...")
     
     conn = get_connection()
     try:
@@ -44,13 +44,13 @@ def load_sample_data():
                 name VARCHAR(255) UNIQUE NOT NULL
             );
             CREATE TABLE IF NOT EXISTS daily_logs (
-                id VARCHAR(255) PRIMARY KEY,
+                id TEXT PRIMARY KEY,
                 log_date DATE NOT NULL UNIQUE,
                 summary TEXT
             );
             CREATE TABLE IF NOT EXISTS planned_sets (
                 id SERIAL PRIMARY KEY,
-                log_id VARCHAR(255) REFERENCES daily_logs(id) ON DELETE CASCADE,
+                log_id TEXT REFERENCES daily_logs(id) ON DELETE CASCADE,
                 exercise_id INTEGER REFERENCES exercises(id),
                 order_num INTEGER NOT NULL,
                 reps INTEGER NOT NULL,
@@ -58,11 +58,16 @@ def load_sample_data():
             );
             CREATE TABLE IF NOT EXISTS completed_sets (
                 id SERIAL PRIMARY KEY,
-                log_id VARCHAR(255) REFERENCES daily_logs(id) ON DELETE CASCADE,
+                log_id TEXT REFERENCES daily_logs(id) ON DELETE CASCADE,
                 exercise_id INTEGER REFERENCES exercises(id),
                 reps_done INTEGER,
                 load_done REAL,
                 completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS timer (
+                id SERIAL PRIMARY KEY,
+                timer_end_time TIMESTAMP NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
         
@@ -72,128 +77,199 @@ def load_sample_data():
         cur.execute("DELETE FROM planned_sets")
         cur.execute("DELETE FROM exercises")
         cur.execute("DELETE FROM daily_logs")
+        cur.execute("DELETE FROM timer")
         
-        # Create today's log
-        today = datetime.now().strftime('%Y-%m-%d')
-        today_log_id = generate_uuid()
-        cur.execute(
-            "INSERT INTO daily_logs (id, log_date, summary) VALUES (%s, %s, %s)",
-            (today_log_id, today, '')
-        )
-        print(f"Created daily log for {today}")
+        # Create dates: July 2, 3, 4, 2025
+        base_date = date(2025, 7, 2)
+        dates = [base_date + timedelta(days=i) for i in range(3)]
         
-        # Create yesterday's log
-        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-        yesterday_log_id = generate_uuid()
-        cur.execute(
-            "INSERT INTO daily_logs (id, log_date, summary) VALUES (%s, %s, %s)",
-            (yesterday_log_id, yesterday, 'Great workout yesterday! Hit all my targets.')
-        )
-        print(f"Created daily log for {yesterday}")
+        # Create daily logs
+        log_ids = []
+        summaries = [
+            "Solid upper body session. Push-ups felt strong, pull-ups getting easier. Bench press moved well at 135. Ready for legs tomorrow.",
+            "Tough leg day. Squats felt heavy but good form. Deadlifts strong for first 2 sets, skipped last set due to form breakdown. Conditioning work tomorrow.",
+            ""  # Today - no summary yet
+        ]
         
-        # Add exercises
+        for i, workout_date in enumerate(dates):
+            log_id = generate_uuid()
+            log_ids.append(log_id)
+            cur.execute(
+                "INSERT INTO daily_logs (id, log_date, summary) VALUES (%s, %s, %s)",
+                (log_id, workout_date.isoformat(), summaries[i])
+            )
+            print(f"Created daily log for {workout_date.isoformat()}")
+        
+        # Create exercises
         exercises = [
-            'bench press',
-            'squat',
-            'deadlift'
+            "push-ups", "pull-ups", "bench press", "overhead press", "rows", "dips",
+            "squats", "deadlifts", "bodyweight squats", "walking lunges", "calf raises", "plank",
+            "burpees", "mountain climbers"
         ]
         
         exercise_ids = {}
-        for exercise_name in exercises:
-            cur.execute(
-                "INSERT INTO exercises (name) VALUES (%s) RETURNING id",
-                (exercise_name,)
-            )
+        for exercise in exercises:
+            cur.execute("INSERT INTO exercises (name) VALUES (%s) RETURNING id", (exercise,))
             result = cur.fetchone()
             if result:
-                exercise_id = result['id']
-                exercise_ids[exercise_name] = exercise_id
-                print(f"Added exercise: {exercise_name} (ID: {exercise_id})")
+                exercise_ids[exercise] = result['id']
+                print(f"Added exercise: {exercise} (ID: {result['id']})")
             else:
-                raise Exception(f"Failed to insert exercise: {exercise_name}")
+                raise Exception(f"Failed to insert exercise: {exercise}")
         
-        # Add planned sets for today
-        planned_sets = [
-            {'exercise': 'bench press', 'order_num': 1, 'reps': 10, 'load': 45},
-            {'exercise': 'bench press', 'order_num': 2, 'reps': 8, 'load': 65},
-            {'exercise': 'bench press', 'order_num': 3, 'reps': 5, 'load': 85},
-            {'exercise': 'squat', 'order_num': 4, 'reps': 10, 'load': 95},
-            {'exercise': 'squat', 'order_num': 5, 'reps': 8, 'load': 135},
-            {'exercise': 'squat', 'order_num': 6, 'reps': 5, 'load': 185},
-            {'exercise': 'deadlift', 'order_num': 7, 'reps': 5, 'load': 135},
-            {'exercise': 'deadlift', 'order_num': 8, 'reps': 5, 'load': 185},
-            {'exercise': 'deadlift', 'order_num': 9, 'reps': 3, 'load': 225}
+        # Day 1 (July 2) - Upper Body Focus
+        day1_planned = [
+            ("push-ups", 1, 15, 0),
+            ("push-ups", 2, 15, 0),
+            ("push-ups", 3, 15, 0),
+            ("pull-ups", 4, 8, 0),
+            ("pull-ups", 5, 8, 0),
+            ("pull-ups", 6, 8, 0),
+            ("bench press", 7, 10, 135),
+            ("bench press", 8, 10, 135),
+            ("bench press", 9, 10, 135),
+            ("overhead press", 10, 8, 95),
+            ("overhead press", 11, 8, 95),
+            ("overhead press", 12, 8, 95),
+            ("rows", 13, 12, 115),
+            ("rows", 14, 12, 115),
+            ("rows", 15, 12, 115),
+            ("dips", 16, 12, 0),
+            ("dips", 17, 12, 0),
         ]
         
-        for set_data in planned_sets:
-            exercise_id = exercise_ids[set_data['exercise']]
-            cur.execute(
-                "INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES (%s, %s, %s, %s, %s)",
-                (today_log_id, exercise_id, set_data['order_num'], set_data['reps'], set_data['load'])
-            )
-        print(f"Added {len(planned_sets)} planned sets for today")
-        
-        # Add planned sets for yesterday
-        yesterday_planned_sets = [
-            {'exercise': 'bench press', 'order_num': 1, 'reps': 8, 'load': 50},
-            {'exercise': 'bench press', 'order_num': 2, 'reps': 6, 'load': 70},
-            {'exercise': 'squat', 'order_num': 3, 'reps': 8, 'load': 100},
-            {'exercise': 'squat', 'order_num': 4, 'reps': 6, 'load': 140},
-            {'exercise': 'deadlift', 'order_num': 5, 'reps': 5, 'load': 140},
-            {'exercise': 'deadlift', 'order_num': 6, 'reps': 3, 'load': 190}
+        day1_completed = [
+            ("push-ups", 15, 0),
+            ("push-ups", 15, 0),
+            ("push-ups", 15, 0),
+            ("pull-ups", 8, 0),
+            ("pull-ups", 8, 0),
+            ("pull-ups", 8, 0),
+            ("bench press", 10, 135),
+            ("bench press", 10, 135),
+            ("bench press", 10, 135),
+            ("overhead press", 8, 95),
+            ("overhead press", 8, 95),
+            ("overhead press", 8, 95),
+            ("rows", 12, 115),
+            ("rows", 12, 115),
+            ("rows", 12, 115),
+            ("dips", 12, 0),
+            ("dips", 12, 0),
         ]
         
-        for set_data in yesterday_planned_sets:
-            exercise_id = exercise_ids[set_data['exercise']]
-            cur.execute(
-                "INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES (%s, %s, %s, %s, %s)",
-                (yesterday_log_id, exercise_id, set_data['order_num'], set_data['reps'], set_data['load'])
-            )
-        print(f"Added {len(yesterday_planned_sets)} planned sets for yesterday")
-        
-        # Add completed sets for today
-        completed_sets = [
-            {'exercise': 'bench press', 'reps_done': 10, 'load_done': 45},
-            {'exercise': 'bench press', 'reps_done': 8, 'load_done': 65},
-            {'exercise': 'squat', 'reps_done': 10, 'load_done': 95},
-            {'exercise': 'deadlift', 'reps_done': 5, 'load_done': 135}
+        # Day 2 (July 3) - Lower Body Focus
+        day2_planned = [
+            ("squats", 1, 12, 185),
+            ("squats", 2, 12, 185),
+            ("squats", 3, 12, 185),
+            ("squats", 4, 12, 185),
+            ("deadlifts", 5, 8, 225),
+            ("deadlifts", 6, 8, 225),
+            ("deadlifts", 7, 8, 225),
+            ("bodyweight squats", 8, 20, 0),
+            ("bodyweight squats", 9, 20, 0),
+            ("walking lunges", 10, 16, 0),
+            ("walking lunges", 11, 16, 0),
+            ("walking lunges", 12, 16, 0),
+            ("calf raises", 13, 15, 45),
+            ("calf raises", 14, 15, 45),
+            ("calf raises", 15, 15, 45),
+            ("plank", 16, 45, 0),
+            ("plank", 17, 45, 0),
+            ("plank", 18, 45, 0),
         ]
         
-        for set_data in completed_sets:
-            exercise_id = exercise_ids[set_data['exercise']]
-            cur.execute(
-                "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done) VALUES (%s, %s, %s, %s)",
-                (today_log_id, exercise_id, set_data['reps_done'], set_data['load_done'])
-            )
-        print(f"Added {len(completed_sets)} completed sets for today")
-        
-        # Add completed sets for yesterday (complete workout)
-        yesterday_completed_sets = [
-            {'exercise': 'bench press', 'reps_done': 8, 'load_done': 50},
-            {'exercise': 'bench press', 'reps_done': 6, 'load_done': 70},
-            {'exercise': 'squat', 'reps_done': 8, 'load_done': 100},
-            {'exercise': 'squat', 'reps_done': 6, 'load_done': 140},
-            {'exercise': 'deadlift', 'reps_done': 5, 'load_done': 140},
-            {'exercise': 'deadlift', 'reps_done': 3, 'load_done': 190}
+        day2_completed = [
+            ("squats", 12, 185),
+            ("squats", 12, 185),
+            ("squats", 12, 185),
+            ("squats", 12, 185),
+            ("deadlifts", 8, 225),
+            ("deadlifts", 8, 225),
+            # Third deadlift set skipped
+            ("bodyweight squats", 20, 0),
+            ("bodyweight squats", 20, 0),
+            ("walking lunges", 16, 0),
+            ("walking lunges", 16, 0),
+            ("walking lunges", 16, 0),
+            ("calf raises", 15, 45),
+            ("calf raises", 15, 45),
+            ("calf raises", 15, 45),
+            ("plank", 45, 0),
+            ("plank", 45, 0),
+            ("plank", 45, 0),
         ]
         
-        for set_data in yesterday_completed_sets:
-            exercise_id = exercise_ids[set_data['exercise']]
-            cur.execute(
-                "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done) VALUES (%s, %s, %s, %s)",
-                (yesterday_log_id, exercise_id, set_data['reps_done'], set_data['load_done'])
-            )
-        print(f"Added {len(yesterday_completed_sets)} completed sets for yesterday")
+        # Day 3 (July 4) - Full Body/Conditioning
+        day3_planned = [
+            ("burpees", 1, 10, 0),
+            ("burpees", 2, 10, 0),
+            ("burpees", 3, 10, 0),
+            ("burpees", 4, 10, 0),
+            ("push-ups", 5, 12, 0),
+            ("push-ups", 6, 12, 0),
+            ("push-ups", 7, 12, 0),
+            ("pull-ups", 8, 6, 0),
+            ("pull-ups", 9, 6, 0),
+            ("pull-ups", 10, 6, 0),
+            ("bodyweight squats", 11, 15, 0),
+            ("bodyweight squats", 12, 15, 0),
+            ("bodyweight squats", 13, 15, 0),
+            ("mountain climbers", 14, 20, 0),
+            ("mountain climbers", 15, 20, 0),
+            ("mountain climbers", 16, 20, 0),
+            ("plank", 17, 60, 0),
+            ("plank", 18, 60, 0),
+            ("plank", 19, 60, 0),
+        ]
+        
+        day3_completed = [
+            ("burpees", 10, 0),
+            ("burpees", 10, 0),
+            ("push-ups", 12, 0),
+            ("pull-ups", 6, 0),
+            ("bodyweight squats", 15, 0),
+            ("mountain climbers", 20, 0),
+            ("plank", 60, 0),
+        ]
+        
+        # Insert planned sets
+        all_planned = [(day1_planned, log_ids[0]), (day2_planned, log_ids[1]), (day3_planned, log_ids[2])]
+        total_planned = 0
+        for day_data, log_id in all_planned:
+            for exercise, order_num, reps, load in day_data:
+                exercise_id = exercise_ids[exercise]
+                cur.execute(
+                    "INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES (%s, %s, %s, %s, %s)",
+                    (log_id, exercise_id, order_num, reps, load)
+                )
+                total_planned += 1
+        
+        # Insert completed sets
+        all_completed = [(day1_completed, log_ids[0]), (day2_completed, log_ids[1]), (day3_completed, log_ids[2])]
+        total_completed = 0
+        for day_data, log_id in all_completed:
+            for exercise, reps, load in day_data:
+                exercise_id = exercise_ids[exercise]
+                cur.execute(
+                    "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done) VALUES (%s, %s, %s, %s)",
+                    (log_id, exercise_id, reps, load)
+                )
+                total_completed += 1
         
         # Commit all changes
         conn.commit()
         
-        print("\nSample data loaded successfully!")
+        print("\nComprehensive sample data loaded successfully!")
         print("Database contains:")
-        print("- 3 exercises")
-        print("- 15 planned sets (9 for today, 6 for yesterday)")
-        print("- 10 completed sets (4 for today, 6 for yesterday)")
-        print("- 2 daily logs (today and yesterday)")
+        print(f"- {len(exercises)} exercises")
+        print(f"- {total_planned} planned sets across 3 workouts")
+        print(f"- {total_completed} completed sets")
+        print(f"- 3 daily logs (July 2-4, 2025)")
+        print(f"- Day 1 (July 2): Upper body focus - 17 planned, 17 completed")
+        print(f"- Day 2 (July 3): Lower body focus - 18 planned, 17 completed")
+        print(f"- Day 3 (July 4): Full body conditioning - 19 planned, 7 completed")
         
     except Exception as e:
         print(f"Error loading sample data: {e}")
@@ -205,6 +281,6 @@ def load_sample_data():
 
 if __name__ == "__main__":
     try:
-        load_sample_data()
+        load_comprehensive_sample_data()
     except Exception as error:
         print(f"Error loading sample data: {error}") 

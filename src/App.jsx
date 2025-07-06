@@ -45,31 +45,154 @@ export default function App() {
     refreshDays(); // Refresh the list when going back
   };
 
+  // Styles
+  const containerStyle = {
+    fontFamily: 'Arial, sans-serif',
+    maxWidth: '1200px',
+    margin: '0 auto',
+    padding: '20px'
+  };
+
+  const headerStyle = {
+    borderBottom: '2px solid #eee',
+    paddingBottom: '15px',
+    marginBottom: '20px'
+  };
+
+  const titleStyle = {
+    margin: 0,
+    color: '#333',
+    fontSize: '24px'
+  };
+
+  const loadingStyle = {
+    textAlign: 'center',
+    color: '#666',
+    fontSize: '16px'
+  };
+
+  const emptyStateStyle = {
+    textAlign: 'center',
+    padding: '40px',
+    border: '2px dashed #ddd',
+    borderRadius: '8px',
+    backgroundColor: '#f8f9fa'
+  };
+
+  const tableStyle = {
+    width: '100%',
+    borderCollapse: 'collapse',
+    backgroundColor: 'white',
+    borderRadius: '8px',
+    overflow: 'hidden',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+  };
+
+  const thStyle = {
+    backgroundColor: '#f8f9fa',
+    padding: '12px',
+    textAlign: 'left',
+    borderBottom: '2px solid #ddd',
+    fontSize: '14px',
+    fontWeight: 'bold',
+    color: '#333'
+  };
+
+  const tdStyle = {
+    padding: '12px',
+    borderBottom: '1px solid #eee',
+    fontSize: '14px'
+  };
+
+  const buttonStyle = {
+    padding: '6px 12px',
+    margin: '0 4px',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '12px',
+    fontWeight: 'bold'
+  };
+
+  const viewButtonStyle = {
+    ...buttonStyle,
+    backgroundColor: '#007bff',
+    color: 'white'
+  };
+
+  const deleteButtonStyle = {
+    ...buttonStyle,
+    backgroundColor: '#dc3545',
+    color: 'white'
+  };
+
+  const codeStyle = {
+    backgroundColor: '#f8f9fa',
+    padding: '2px 6px',
+    borderRadius: '3px',
+    fontSize: '13px',
+    fontFamily: 'monospace'
+  };
+
   return (
-    <div style={{ padding: 20 }}>
+    <div style={containerStyle}>
       {!selected && (
         <div>
-          <h2>Workout Days</h2>
-          {loading && <p>Loading workout days...</p>}
-          {!loading && days.length === 0 && (
-            <div>
-              <p>No workout days found.</p>
-              <p>Run <code>npm run load-sample</code> to load sample data.</p>
+          <div style={headerStyle}>
+            <h1 style={titleStyle}>🏋️ Workout Tracker</h1>
+          </div>
+          
+          {loading && (
+            <div style={loadingStyle}>
+              <p>Loading workout days...</p>
             </div>
           )}
+          
+          {!loading && days.length === 0 && (
+            <div style={emptyStateStyle}>
+              <h3>No workout days found</h3>
+              <p>Get started by loading some sample data:</p>
+              <p>Run <code style={codeStyle}>npm run load-sample</code> to load sample data.</p>
+            </div>
+          )}
+          
           {!loading && days.length > 0 && (
-            <table border="1" cellPadding="4">
+            <table style={tableStyle}>
               <thead>
-                <tr><th>Date</th><th>Summary</th><th>Actions</th></tr>
+                <tr>
+                  <th style={thStyle}>📅 Date</th>
+                  <th style={thStyle}>📝 Summary</th>
+                  <th style={thStyle}>⚡ Actions</th>
+                </tr>
               </thead>
               <tbody>
                 {days.map(d => (
                   <tr key={d.id}>
-                    <td>{d.log_date}</td>
-                    <td>{d.summary || <em>No summary</em>}</td>
-                    <td>
-                      <button onClick={() => setSelected(d.id)}>View</button>
-                      <button onClick={() => deleteDay(d.id)}>Delete</button>
+                    <td style={tdStyle}>
+                      <strong>{d.log_date}</strong>
+                    </td>
+                    <td style={tdStyle}>
+                      {d.summary ? (
+                        <div style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {d.summary}
+                        </div>
+                      ) : (
+                        <em style={{ color: '#666' }}>No summary</em>
+                      )}
+                    </td>
+                    <td style={tdStyle}>
+                      <button 
+                        style={viewButtonStyle} 
+                        onClick={() => setSelected(d.id)}
+                      >
+                        View Details
+                      </button>
+                      <button 
+                        style={deleteButtonStyle} 
+                        onClick={() => deleteDay(d.id)}
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}
