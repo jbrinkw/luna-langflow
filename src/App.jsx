@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import DayDetail from './DayDetail';
+import Sidebar from './Sidebar';
 
 export default function App() {
   const [days, setDays] = useState([]);
@@ -47,6 +48,7 @@ export default function App() {
 
   return (
     <div style={{ padding: 20 }}>
+      <Sidebar />
       {!selected && (
         <div>
           <h2>Workout Days</h2>
