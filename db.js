@@ -1,58 +1,88 @@
-const Database = require('better-sqlite3');
-const path = require('path');
-const db = new Database(path.join(__dirname, 'workout.db'));
+const { Pool } = require('pg');
 
-function initDb(sample = false) {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS exercises (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS daily_logs (
-      id TEXT PRIMARY KEY,
-      log_date DATE NOT NULL UNIQUE,
-      summary TEXT
-    );
-    CREATE TABLE IF NOT EXISTS planned_sets (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      log_id TEXT REFERENCES daily_logs(id) ON DELETE CASCADE,
-      exercise_id INTEGER REFERENCES exercises(id),
-      order_num INTEGER NOT NULL,
-      reps INTEGER NOT NULL,
-      load REAL NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS completed_sets (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      log_id TEXT REFERENCES daily_logs(id) ON DELETE CASCADE,
-      exercise_id INTEGER REFERENCES exercises(id),
-      reps_done INTEGER,
-      load_done REAL,
-      completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
+// Database configuration
+const dbConfig = {
+  host: process.env.DB_HOST || '192.168.1.93',
+  port: process.env.DB_PORT || 5432,
+  database: process.env.DB_NAME || 'workout_tracker',
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || 'postgres',
+};
 
-  if (sample) {
-    const today = new Date().toISOString().slice(0,10);
-    const logId = ensureDay(today);
-    const exId = getExerciseId('bench press');
-    db.prepare('INSERT OR IGNORE INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES (?, ?, ?, ?, ?)')
-      .run(logId, exId, 1, 10, 100);
+const pool = new Pool(dbConfig);
+
+async function initDb(sample = false) {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS exercises (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) UNIQUE NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS daily_logs (
+        id VARCHAR(255) PRIMARY KEY,
+        log_date DATE NOT NULL UNIQUE,
+        summary TEXT
+      );
+      CREATE TABLE IF NOT EXISTS planned_sets (
+        id SERIAL PRIMARY KEY,
+        log_id VARCHAR(255) REFERENCES daily_logs(id) ON DELETE CASCADE,
+        exercise_id INTEGER REFERENCES exercises(id),
+        order_num INTEGER NOT NULL,
+        reps INTEGER NOT NULL,
+        load REAL NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS completed_sets (
+        id SERIAL PRIMARY KEY,
+        log_id VARCHAR(255) REFERENCES daily_logs(id) ON DELETE CASCADE,
+        exercise_id INTEGER REFERENCES exercises(id),
+        reps_done INTEGER,
+        load_done REAL,
+        completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    if (sample) {
+      const today = new Date().toISOString().slice(0,10);
+      const logId = await ensureDay(today);
+      const exId = await getExerciseId('bench press');
+      await client.query(
+        'INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING',
+        [logId, exId, 1, 10, 100]
+      );
+    }
+  } finally {
+    client.release();
   }
 }
 
-function getExerciseId(name) {
-  const row = db.prepare('SELECT id FROM exercises WHERE name=?').get(name);
-  if (row) return row.id;
-  const info = db.prepare('INSERT INTO exercises (name) VALUES (?)').run(name);
-  return info.lastInsertRowid;
+async function getExerciseId(name) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query('SELECT id FROM exercises WHERE name = $1', [name]);
+    if (result.rows.length > 0) {
+      return result.rows[0].id;
+    }
+    const insertResult = await client.query('INSERT INTO exercises (name) VALUES ($1) RETURNING id', [name]);
+    return insertResult.rows[0].id;
+  } finally {
+    client.release();
+  }
 }
 
-function ensureDay(dateStr) {
-  const row = db.prepare('SELECT id FROM daily_logs WHERE log_date=?').get(dateStr);
-  if (row) return row.id;
-  const logId = generateUuid();
-  db.prepare("INSERT INTO daily_logs (id, log_date, summary) VALUES (?, ?, '')").run(logId, dateStr);
-  return logId;
+async function ensureDay(dateStr) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query('SELECT id FROM daily_logs WHERE log_date = $1', [dateStr]);
+    if (result.rows.length > 0) {
+      return result.rows[0].id;
+    }
+    const logId = generateUuid();
+    await client.query('INSERT INTO daily_logs (id, log_date, summary) VALUES ($1, $2, $3)', [logId, dateStr, '']);
+    return logId;
+  } finally {
+    client.release();
+  }
 }
 
 function generateUuid() {
@@ -63,62 +93,134 @@ function generateUuid() {
   });
 }
 
-function getAllDays() {
-  return db.prepare('SELECT id, log_date, summary FROM daily_logs ORDER BY log_date DESC').all();
+async function getAllDays() {
+  const client = await pool.connect();
+  try {
+    const result = await client.query('SELECT id, log_date, summary FROM daily_logs ORDER BY log_date DESC');
+    return result.rows;
+  } finally {
+    client.release();
+  }
 }
 
-function deleteDay(id) {
-  db.prepare('DELETE FROM daily_logs WHERE id=?').run(id);
+async function deleteDay(id) {
+  const client = await pool.connect();
+  try {
+    await client.query('DELETE FROM daily_logs WHERE id = $1', [id]);
+  } finally {
+    client.release();
+  }
 }
 
-function getDay(id) {
-  const log = db.prepare('SELECT id, log_date, summary FROM daily_logs WHERE id=?').get(id);
-  if (!log) return null;
-  const plan = db.prepare(`SELECT ps.id, e.name as exercise, ps.reps, ps.load, ps.order_num
-                           FROM planned_sets ps JOIN exercises e ON ps.exercise_id=e.id
-                           WHERE ps.log_id=? ORDER BY ps.order_num`).all(id);
-  const completed = db.prepare(`SELECT cs.id, e.name as exercise, cs.reps_done, cs.load_done
-                                FROM completed_sets cs JOIN exercises e ON cs.exercise_id=e.id
-                                WHERE cs.log_id=?`).all(id);
-  return { log, plan, completed };
+async function getDay(id) {
+  const client = await pool.connect();
+  try {
+    const logResult = await client.query('SELECT id, log_date, summary FROM daily_logs WHERE id = $1', [id]);
+    if (logResult.rows.length === 0) return null;
+    
+    const log = logResult.rows[0];
+    
+    const planResult = await client.query(`
+      SELECT ps.id, e.name as exercise, ps.reps, ps.load, ps.order_num
+      FROM planned_sets ps JOIN exercises e ON ps.exercise_id = e.id
+      WHERE ps.log_id = $1 ORDER BY ps.order_num
+    `, [id]);
+    
+    const completedResult = await client.query(`
+      SELECT cs.id, e.name as exercise, cs.reps_done, cs.load_done
+      FROM completed_sets cs JOIN exercises e ON cs.exercise_id = e.id
+      WHERE cs.log_id = $1
+    `, [id]);
+    
+    return {
+      log,
+      plan: planResult.rows,
+      completed: completedResult.rows
+    };
+  } finally {
+    client.release();
+  }
 }
 
-function addPlan(logId, item) {
-  const exId = getExerciseId(item.exercise);
-  const info = db.prepare('INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES (?, ?, ?, ?, ?)')
-    .run(logId, exId, item.order_num, item.reps, item.load);
-  return info.lastInsertRowid;
+async function addPlan(logId, item) {
+  const client = await pool.connect();
+  try {
+    const exId = await getExerciseId(item.exercise);
+    const result = await client.query(
+      'INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [logId, exId, item.order_num, item.reps, item.load]
+    );
+    return result.rows[0].id;
+  } finally {
+    client.release();
+  }
 }
 
-function updatePlan(id, item) {
-  const exId = getExerciseId(item.exercise);
-  db.prepare('UPDATE planned_sets SET exercise_id=?, order_num=?, reps=?, load=? WHERE id=?')
-    .run(exId, item.order_num, item.reps, item.load, id);
+async function updatePlan(id, item) {
+  const client = await pool.connect();
+  try {
+    const exId = await getExerciseId(item.exercise);
+    await client.query(
+      'UPDATE planned_sets SET exercise_id = $1, order_num = $2, reps = $3, load = $4 WHERE id = $5',
+      [exId, item.order_num, item.reps, item.load, id]
+    );
+  } finally {
+    client.release();
+  }
 }
 
-function deletePlan(id) {
-  db.prepare('DELETE FROM planned_sets WHERE id=?').run(id);
+async function deletePlan(id) {
+  const client = await pool.connect();
+  try {
+    await client.query('DELETE FROM planned_sets WHERE id = $1', [id]);
+  } finally {
+    client.release();
+  }
 }
 
-function addCompleted(logId, item) {
-  const exId = getExerciseId(item.exercise);
-  const info = db.prepare('INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done) VALUES (?, ?, ?, ?)')
-    .run(logId, exId, item.reps_done, item.load_done);
-  return info.lastInsertRowid;
+async function addCompleted(logId, item) {
+  const client = await pool.connect();
+  try {
+    const exId = await getExerciseId(item.exercise);
+    const result = await client.query(
+      'INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done) VALUES ($1, $2, $3, $4) RETURNING id',
+      [logId, exId, item.reps_done, item.load_done]
+    );
+    return result.rows[0].id;
+  } finally {
+    client.release();
+  }
 }
 
-function updateCompleted(id, item) {
-  const exId = getExerciseId(item.exercise);
-  db.prepare('UPDATE completed_sets SET exercise_id=?, reps_done=?, load_done=? WHERE id=?')
-    .run(exId, item.reps_done, item.load_done, id);
+async function updateCompleted(id, item) {
+  const client = await pool.connect();
+  try {
+    const exId = await getExerciseId(item.exercise);
+    await client.query(
+      'UPDATE completed_sets SET exercise_id = $1, reps_done = $2, load_done = $3 WHERE id = $4',
+      [exId, item.reps_done, item.load_done, id]
+    );
+  } finally {
+    client.release();
+  }
 }
 
-function deleteCompleted(id) {
-  db.prepare('DELETE FROM completed_sets WHERE id=?').run(id);
+async function deleteCompleted(id) {
+  const client = await pool.connect();
+  try {
+    await client.query('DELETE FROM completed_sets WHERE id = $1', [id]);
+  } finally {
+    client.release();
+  }
 }
 
-function updateSummary(id, summary) {
-  db.prepare('UPDATE daily_logs SET summary=? WHERE id=?').run(summary, id);
+async function updateSummary(id, summary) {
+  const client = await pool.connect();
+  try {
+    await client.query('UPDATE daily_logs SET summary = $1 WHERE id = $2', [summary, id]);
+  } finally {
+    client.release();
+  }
 }
 
 module.exports = {

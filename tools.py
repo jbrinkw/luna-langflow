@@ -1,6 +1,6 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import date, timedelta
-import sqlite3
+import psycopg2.extras
 
 from db import get_connection, get_today_log_id
 from agents import function_tool
@@ -10,13 +10,14 @@ MAX_LOAD = 2000
 MAX_REPS = 100
 
 
-def _get_exercise_id(conn: sqlite3.Connection, name: str) -> int:
-    cur = conn.execute("SELECT id FROM exercises WHERE name = ?", (name,))
+def _get_exercise_id(conn, name: str) -> int:
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT id FROM exercises WHERE name = %s", (name,))
     row = cur.fetchone()
     if row:
-        return row[0]
-    cur = conn.execute("INSERT INTO exercises (name) VALUES (?)", (name,))
-    return cur.lastrowid
+        return row['id']
+    cur.execute("INSERT INTO exercises (name) VALUES (%s) RETURNING id", (name,))
+    return cur.fetchone()['id']
 
 
 @function_tool(strict_mode=False)
@@ -24,6 +25,7 @@ def new_daily_plan(items: List[Dict[str, Any]]):
     """Create today's daily log and planned sets"""
     conn = get_connection()
     try:
+        cur = conn.cursor()
         log_id = get_today_log_id(conn)
         for item in items:
             reps = int(item["reps"])
@@ -34,8 +36,8 @@ def new_daily_plan(items: List[Dict[str, Any]]):
                 raise ValueError("load out of range")
             exercise_id = _get_exercise_id(conn, item["exercise"])
             order_num = int(item["order"])
-            conn.execute(
-                "INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES (?, ?, ?, ?, ?)",
+            cur.execute(
+                "INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES (%s, %s, %s, %s, %s)",
                 (log_id, exercise_id, order_num, reps, load),
             )
         conn.commit()
@@ -49,9 +51,10 @@ def get_today_plan() -> List[Dict[str, Any]]:
     """Return today's planned sets in workout order."""
     conn = get_connection()
     try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         log_id = get_today_log_id(conn)
-        cur = conn.execute(
-            "SELECT e.name as exercise, reps, load, order_num FROM planned_sets ps JOIN exercises e ON ps.exercise_id = e.id WHERE log_id = ? ORDER BY order_num",
+        cur.execute(
+            "SELECT e.name as exercise, reps, load, order_num FROM planned_sets ps JOIN exercises e ON ps.exercise_id = e.id WHERE log_id = %s ORDER BY order_num",
             (log_id,),
         )
         rows = [dict(row) for row in cur.fetchall()]
@@ -69,10 +72,11 @@ def log_completed_set(exercise: str, reps: int, load: float):
         raise ValueError("load out of range")
     conn = get_connection()
     try:
+        cur = conn.cursor()
         log_id = get_today_log_id(conn)
         exercise_id = _get_exercise_id(conn, exercise)
-        conn.execute(
-            "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done) VALUES (?, ?, ?, ?)",
+        cur.execute(
+            "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done) VALUES (%s, %s, %s, %s)",
             (log_id, exercise_id, reps, load),
         )
         conn.commit()
@@ -86,8 +90,9 @@ def update_summary(text: str):
     """Update today's daily log summary."""
     conn = get_connection()
     try:
+        cur = conn.cursor()
         log_id = get_today_log_id(conn)
-        conn.execute("UPDATE daily_logs SET summary = ? WHERE id = ?", (text, log_id))
+        cur.execute("UPDATE daily_logs SET summary = %s WHERE id = %s", (text, log_id))
         conn.commit()
     finally:
         conn.close()
@@ -99,15 +104,16 @@ def get_recent_history(days: int) -> List[Dict[str, Any]]:
     """Return planned and completed sets for the last ``days`` calendar days."""
     conn = get_connection()
     try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         start = date.today() - timedelta(days=days)
-        cur = conn.execute(
+        cur.execute(
             """
             SELECT dl.log_date, e.name as exercise, ps.reps, ps.load, cs.reps_done, cs.load_done
             FROM planned_sets ps
             JOIN daily_logs dl ON ps.log_id = dl.id
             JOIN exercises e ON ps.exercise_id = e.id
             LEFT JOIN completed_sets cs ON cs.log_id = ps.log_id AND cs.exercise_id = ps.exercise_id
-            WHERE dl.log_date >= ?
+            WHERE dl.log_date >= %s
             ORDER BY dl.log_date, ps.order_num
             """,
             (start.isoformat(),),
@@ -119,15 +125,24 @@ def get_recent_history(days: int) -> List[Dict[str, Any]]:
 
 
 @function_tool(strict_mode=False)
-def run_sql(query: str, params: Dict[str, Any] = None, confirm: bool = False):
+def run_sql(query: str, params: Optional[Dict[str, Any]] = None, confirm: bool = False):
     """Run arbitrary SQL. Reject mutations unless confirm=True"""
-    params = params or {}
+    if params is None:
+        params = {}
     lowered = query.strip().lower()
     if not lowered.startswith("select") and not confirm:
         raise ValueError("updates require confirm=True")
     conn = get_connection()
     try:
-        cur = conn.execute(query, params)
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        # Convert params dict to list if needed for PostgreSQL
+        if params:
+            # PostgreSQL uses %(name)s format for named parameters
+            cur.execute(query, params)
+        else:
+            cur.execute(query)
+            
         if lowered.startswith("select"):
             rows = [dict(row) for row in cur.fetchall()]
         else:
@@ -139,8 +154,10 @@ def run_sql(query: str, params: Dict[str, Any] = None, confirm: bool = False):
 
 
 @function_tool(strict_mode=False)
-def arbitrary_update(query: str, params: Dict[str, Any] = None):
+def arbitrary_update(query: str, params: Optional[Dict[str, Any]] = None):
     """Execute a confirmed SQL statement for updates or inserts."""
+    if params is None:
+        params = {}
     return run_sql(query, params=params, confirm=True)
 
 __all__ = [

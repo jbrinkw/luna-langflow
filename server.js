@@ -13,60 +13,116 @@ app.use(express.static('.'));
 // Initialize database schema (without sample data)
 db.initDb(false);
 
-app.get('/api/days', (req, res) => {
-  res.json(db.getAllDays());
+app.get('/api/days', async (req, res) => {
+  try {
+    const days = await db.getAllDays();
+    res.json(days);
+  } catch (error) {
+    console.error('Error getting days:', error);
+    res.status(500).json({ error: 'Failed to get days' });
+  }
 });
 
-app.post('/api/days', (req, res) => {
-  const { date } = req.body;
-  const id = db.ensureDay(date);
-  res.json({ id });
+app.post('/api/days', async (req, res) => {
+  try {
+    const { date } = req.body;
+    const id = await db.ensureDay(date);
+    res.json({ id });
+  } catch (error) {
+    console.error('Error creating day:', error);
+    res.status(500).json({ error: 'Failed to create day' });
+  }
 });
 
-app.delete('/api/days/:id', (req, res) => {
-  db.deleteDay(req.params.id);
-  res.json({ ok: true });
+app.delete('/api/days/:id', async (req, res) => {
+  try {
+    await db.deleteDay(req.params.id);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error deleting day:', error);
+    res.status(500).json({ error: 'Failed to delete day' });
+  }
 });
 
-app.get('/api/days/:id', (req, res) => {
-  const data = db.getDay(req.params.id);
-  if (!data) return res.status(404).end();
-  res.json(data);
+app.get('/api/days/:id', async (req, res) => {
+  try {
+    const data = await db.getDay(req.params.id);
+    if (!data) return res.status(404).end();
+    res.json(data);
+  } catch (error) {
+    console.error('Error getting day:', error);
+    res.status(500).json({ error: 'Failed to get day' });
+  }
 });
 
-app.post('/api/days/:id/plan', (req, res) => {
-  const id = db.addPlan(req.params.id, req.body);
-  res.json({ id });
+app.post('/api/days/:id/plan', async (req, res) => {
+  try {
+    const id = await db.addPlan(req.params.id, req.body);
+    res.json({ id });
+  } catch (error) {
+    console.error('Error adding plan:', error);
+    res.status(500).json({ error: 'Failed to add plan' });
+  }
 });
 
-app.put('/api/plan/:id', (req, res) => {
-  db.updatePlan(Number(req.params.id), req.body);
-  res.json({ ok: true });
+app.put('/api/plan/:id', async (req, res) => {
+  try {
+    await db.updatePlan(Number(req.params.id), req.body);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error updating plan:', error);
+    res.status(500).json({ error: 'Failed to update plan' });
+  }
 });
 
-app.delete('/api/plan/:id', (req, res) => {
-  db.deletePlan(Number(req.params.id));
-  res.json({ ok: true });
+app.delete('/api/plan/:id', async (req, res) => {
+  try {
+    await db.deletePlan(Number(req.params.id));
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error deleting plan:', error);
+    res.status(500).json({ error: 'Failed to delete plan' });
+  }
 });
 
-app.post('/api/days/:id/completed', (req, res) => {
-  const id = db.addCompleted(req.params.id, req.body);
-  res.json({ id });
+app.post('/api/days/:id/completed', async (req, res) => {
+  try {
+    const id = await db.addCompleted(req.params.id, req.body);
+    res.json({ id });
+  } catch (error) {
+    console.error('Error adding completed set:', error);
+    res.status(500).json({ error: 'Failed to add completed set' });
+  }
 });
 
-app.put('/api/completed/:id', (req, res) => {
-  db.updateCompleted(Number(req.params.id), req.body);
-  res.json({ ok: true });
+app.put('/api/completed/:id', async (req, res) => {
+  try {
+    await db.updateCompleted(Number(req.params.id), req.body);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error updating completed set:', error);
+    res.status(500).json({ error: 'Failed to update completed set' });
+  }
 });
 
-app.delete('/api/completed/:id', (req, res) => {
-  db.deleteCompleted(Number(req.params.id));
-  res.json({ ok: true });
+app.delete('/api/completed/:id', async (req, res) => {
+  try {
+    await db.deleteCompleted(Number(req.params.id));
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error deleting completed set:', error);
+    res.status(500).json({ error: 'Failed to delete completed set' });
+  }
 });
 
-app.put('/api/days/:id/summary', (req, res) => {
-  db.updateSummary(req.params.id, req.body.summary || '');
-  res.json({ ok: true });
+app.put('/api/days/:id/summary', async (req, res) => {
+  try {
+    await db.updateSummary(req.params.id, req.body.summary || '');
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error updating summary:', error);
+    res.status(500).json({ error: 'Failed to update summary' });
+  }
 });
 
 // Serve the React app for the root route
