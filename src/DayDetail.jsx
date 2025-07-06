@@ -72,8 +72,9 @@ export default function DayDetail({ id, onBack }) {
     <div>
       <button onClick={onBack}>Back</button>
       <h3>{data.log.log_date}</h3>
-      <div>
-        <h4>Planned Sets</h4>
+      <div className="tables-row">
+        <div>
+          <h4>Planned Sets</h4>
         <table border="1" cellPadding="4">
           <thead><tr><th>Exercise</th><th>Reps</th><th>Load</th><th>Order</th><th></th></tr></thead>
           <tbody>
@@ -95,10 +96,10 @@ export default function DayDetail({ id, onBack }) {
             </tr>
           </tbody>
         </table>
-      </div>
-      <div>
-        <h4>Completed Sets</h4>
-        <table border="1" cellPadding="4">
+        </div>
+        <div>
+          <h4>Completed Sets</h4>
+          <table border="1" cellPadding="4">
           <thead><tr><th>Exercise</th><th>Reps</th><th>Load</th><th></th></tr></thead>
           <tbody>
             {data.completed.map((c,i) => (
@@ -117,6 +118,7 @@ export default function DayDetail({ id, onBack }) {
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
       <div>
         <h4>Summary</h4>

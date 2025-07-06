@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import DayDetail from './DayDetail';
+import ChatSidebar from './ChatSidebar';
 
 export default function App() {
   const [days, setDays] = useState([]);
@@ -46,10 +47,12 @@ export default function App() {
   };
 
   return (
-    <div style={{ padding: 20 }}>
-      {!selected && (
-        <div>
-          <h2>Workout Days</h2>
+    <>
+      <ChatSidebar />
+      <div id="main-container">
+        {!selected && (
+          <div>
+            <h2>Workout Days</h2>
           {loading && <p>Loading workout days...</p>}
           {!loading && days.length === 0 && (
             <div>
@@ -79,6 +82,7 @@ export default function App() {
         </div>
       )}
       {selected && <DayDetail id={selected} onBack={handleBack} />}
-    </div>
+      </div>
+    </>
   );
 }
