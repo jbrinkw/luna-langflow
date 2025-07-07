@@ -5,33 +5,46 @@ export default function App() {
   const [days, setDays] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState(null);
+
+  const loadDays = async () => {
+    try {
+      const response = await fetch('/api/days');
+      const data = await response.json();
+      
+      // Update days and track last updated time
+      setDays(prevDays => {
+        const dataString = JSON.stringify(data);
+        const currentDataString = JSON.stringify(prevDays);
+        
+        if (dataString !== currentDataString) {
+          setLastUpdated(new Date());
+          return data;
+        }
+        return prevDays;
+      });
+      
+      setLoading(false);
+    } catch (err) {
+      console.error('Error loading days:', err);
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    setLoading(true);
-    fetch('/api/days')
-      .then(r => r.json())
-      .then(data => {
-        setDays(data);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error('Error loading days:', err);
-        setLoading(false);
-      });
+    // Initial load
+    loadDays();
+    
+    // Set up polling every 5 seconds
+    const interval = setInterval(loadDays, 5000);
+    
+    // Cleanup interval on unmount
+    return () => clearInterval(interval);
   }, []);
 
   const refreshDays = () => {
     setLoading(true);
-    fetch('/api/days')
-      .then(r => r.json())
-      .then(data => {
-        setDays(data);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error('Error loading days:', err);
-        setLoading(false);
-      });
+    loadDays();
   };
 
   const deleteDay = async (id) => {
@@ -140,6 +153,11 @@ export default function App() {
         <div>
           <div style={headerStyle}>
             <h1 style={titleStyle}>🏋️ Workout Tracker</h1>
+            {lastUpdated && (
+              <div style={{ fontSize: '12px', color: '#666' }}>
+                Last updated: {lastUpdated.toLocaleTimeString()}
+              </div>
+            )}
           </div>
           
           {loading && (

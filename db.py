@@ -85,11 +85,12 @@ def init_db(sample: bool = False):
 
 
 def populate_comprehensive_sample_data(conn):
-    """Create comprehensive 3-day MMA-focused workout data"""
+    """Create comprehensive 3-day MMA-focused workout data with dynamic dates"""
     
-    # Create dates: July 2, 3, 4, 2025
-    base_date = date(2025, 7, 2)
-    dates = [base_date + timedelta(days=i) for i in range(3)]
+    # Create dates: current day, current day - 1, current day - 2
+    today = date.today()
+    dates = [today - timedelta(days=i) for i in range(3)]  # [today, yesterday, day before yesterday]
+    dates.reverse()  # [day before yesterday, yesterday, today]
     
     # Create daily logs
     log_ids = []
@@ -120,7 +121,7 @@ def populate_comprehensive_sample_data(conn):
         cur.execute("INSERT INTO exercises (name) VALUES (%s) RETURNING id", (exercise,))
         exercise_ids[exercise] = cur.fetchone()[0]
     
-    # Day 1 (July 2) - Upper Body Focus
+    # Day 1 (2 days ago) - Upper Body Focus
     day1_planned = [
         ("push-ups", 1, 15, 0),
         ("push-ups", 2, 15, 0),
@@ -161,7 +162,7 @@ def populate_comprehensive_sample_data(conn):
         ("dips", 12, 0),
     ]
     
-    # Day 2 (July 3) - Lower Body Focus
+    # Day 2 (yesterday) - Lower Body Focus
     day2_planned = [
         ("squats", 1, 12, 185),
         ("squats", 2, 12, 185),
@@ -204,7 +205,7 @@ def populate_comprehensive_sample_data(conn):
         ("plank", 45, 0),
     ]
     
-    # Day 3 (July 4) - Full Body/Conditioning
+    # Day 3 (today) - Full Body/Conditioning
     day3_planned = [
         ("burpees", 1, 10, 0),
         ("burpees", 2, 10, 0),
@@ -252,8 +253,9 @@ def populate_comprehensive_sample_data(conn):
     for day_data, log_id in all_completed:
         for exercise, reps, load in day_data:
             exercise_id = exercise_ids[exercise]
+            # Use database default timestamp with timezone correction for sample data
             cur.execute(
-                "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done) VALUES (%s, %s, %s, %s)",
+                "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done, completed_at) VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP - INTERVAL '4 hours')",
                 (log_id, exercise_id, reps, load)
             )
 

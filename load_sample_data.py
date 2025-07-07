@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Load comprehensive sample data into PostgreSQL database.
-This creates 3 days of MMA-focused workout data (July 2-4, 2025).
+This creates 3 days of MMA-focused workout data (current day, current day - 1, current day - 2).
 """
 
 import uuid
@@ -29,7 +29,7 @@ def get_connection():
 
 
 def load_comprehensive_sample_data():
-    """Load comprehensive 3-day MMA workout sample data"""
+    """Load comprehensive 3-day MMA workout sample data with dynamic dates"""
     print("Loading comprehensive 3-day MMA workout sample data...")
     
     conn = get_connection()
@@ -79,9 +79,10 @@ def load_comprehensive_sample_data():
         cur.execute("DELETE FROM daily_logs")
         cur.execute("DELETE FROM timer")
         
-        # Create dates: July 2, 3, 4, 2025
-        base_date = date(2025, 7, 2)
-        dates = [base_date + timedelta(days=i) for i in range(3)]
+        # Create dates: current day, current day - 1, current day - 2
+        today = date.today()
+        dates = [today - timedelta(days=i) for i in range(3)]  # [today, yesterday, day before yesterday]
+        dates.reverse()  # [day before yesterday, yesterday, today]
         
         # Create daily logs
         log_ids = []
@@ -117,7 +118,7 @@ def load_comprehensive_sample_data():
             else:
                 raise Exception(f"Failed to insert exercise: {exercise}")
         
-        # Day 1 (July 2) - Upper Body Focus
+        # Day 1 (2 days ago) - Upper Body Focus
         day1_planned = [
             ("push-ups", 1, 15, 0),
             ("push-ups", 2, 15, 0),
@@ -158,7 +159,7 @@ def load_comprehensive_sample_data():
             ("dips", 12, 0),
         ]
         
-        # Day 2 (July 3) - Lower Body Focus
+        # Day 2 (yesterday) - Lower Body Focus
         day2_planned = [
             ("squats", 1, 12, 185),
             ("squats", 2, 12, 185),
@@ -201,7 +202,7 @@ def load_comprehensive_sample_data():
             ("plank", 45, 0),
         ]
         
-        # Day 3 (July 4) - Full Body/Conditioning
+        # Day 3 (today) - Full Body/Conditioning
         day3_planned = [
             ("burpees", 1, 10, 0),
             ("burpees", 2, 10, 0),
@@ -266,10 +267,10 @@ def load_comprehensive_sample_data():
         print(f"- {len(exercises)} exercises")
         print(f"- {total_planned} planned sets across 3 workouts")
         print(f"- {total_completed} completed sets")
-        print(f"- 3 daily logs (July 2-4, 2025)")
-        print(f"- Day 1 (July 2): Upper body focus - 17 planned, 17 completed")
-        print(f"- Day 2 (July 3): Lower body focus - 18 planned, 17 completed")
-        print(f"- Day 3 (July 4): Full body conditioning - 19 planned, 7 completed")
+        print(f"- 3 daily logs ({dates[0].isoformat()}, {dates[1].isoformat()}, {dates[2].isoformat()})")
+        print(f"- Day 1 ({dates[0].isoformat()}): Upper body focus - 17 planned, 17 completed")
+        print(f"- Day 2 ({dates[1].isoformat()}): Lower body focus - 18 planned, 17 completed")
+        print(f"- Day 3 ({dates[2].isoformat()}): Full body conditioning - 19 planned, 7 completed")
         
     except Exception as e:
         print(f"Error loading sample data: {e}")

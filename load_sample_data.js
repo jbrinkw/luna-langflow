@@ -15,7 +15,7 @@ function generateUuid() {
 }
 
 function loadSampleData() {
-  console.log('Loading sample data...');
+  console.log('Loading comprehensive 3-day MMA workout sample data with dynamic dates...');
   
   // Create schema
   db.exec(`
@@ -54,25 +54,47 @@ function loadSampleData() {
     DELETE FROM daily_logs;
   `);
 
-  // Create today's log
-  const today = new Date().toISOString().slice(0, 10);
-  const logId = generateUuid();
-  db.prepare("INSERT INTO daily_logs (id, log_date, summary) VALUES (?, ?, '')").run(logId, today);
-  console.log(`Created daily log for ${today}`);
-
-  // Create yesterday's log
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().slice(0, 10);
-  const yesterdayLogId = generateUuid();
-  db.prepare("INSERT INTO daily_logs (id, log_date, summary) VALUES (?, ?, ?)").run(yesterdayLogId, yesterdayStr, 'Great workout yesterday! Hit all my targets.');
-  console.log(`Created daily log for ${yesterdayStr}`);
+  // Create logs for 3 days: current day, current day - 1, current day - 2
+  const today = new Date();
+  const dates = [];
+  const logIds = [];
+  const summaries = [
+    'Great workout 2 days ago! Hit all my targets.',
+    'Good session yesterday. Made progress on all lifts.',
+    ''  // Today - no summary yet
+  ];
+  
+  // Create logs for 3 days
+  for (let i = 2; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - i);
+    const dateStr = date.toISOString().slice(0, 10);
+    dates.push(dateStr);
+    
+    const logId = generateUuid();
+    logIds.push(logId);
+    
+    db.prepare("INSERT INTO daily_logs (id, log_date, summary) VALUES (?, ?, ?)")
+      .run(logId, dateStr, summaries[2-i]);
+    console.log(`Created daily log for ${dateStr}`);
+  }
 
   // Add exercises
   const exercises = [
+    { name: 'push-ups' },
+    { name: 'pull-ups' }, 
     { name: 'bench press' },
-    { name: 'squat' },
-    { name: 'deadlift' }
+    { name: 'overhead press' },
+    { name: 'rows' },
+    { name: 'dips' },
+    { name: 'squats' },
+    { name: 'deadlifts' },
+    { name: 'bodyweight squats' },
+    { name: 'walking lunges' },
+    { name: 'calf raises' },
+    { name: 'plank' },
+    { name: 'burpees' },
+    { name: 'mountain climbers' }
   ];
 
   const exerciseIds = {};
@@ -82,81 +104,161 @@ function loadSampleData() {
     console.log(`Added exercise: ${exercise.name} (ID: ${result.lastInsertRowid})`);
   });
 
-  // Add planned sets
-  const plannedSets = [
-    { exercise: 'bench press', order_num: 1, reps: 10, load: 45 },
-    { exercise: 'bench press', order_num: 2, reps: 8, load: 65 },
-    { exercise: 'bench press', order_num: 3, reps: 5, load: 85 },
-    { exercise: 'squat', order_num: 4, reps: 10, load: 95 },
-    { exercise: 'squat', order_num: 5, reps: 8, load: 135 },
-    { exercise: 'squat', order_num: 6, reps: 5, load: 185 },
-    { exercise: 'deadlift', order_num: 7, reps: 5, load: 135 },
-    { exercise: 'deadlift', order_num: 8, reps: 5, load: 185 },
-    { exercise: 'deadlift', order_num: 9, reps: 3, load: 225 }
+  // Add planned sets for each day
+  const plannedSetsData = [
+    // Day 1 (2 days ago) - Upper Body Focus
+    [
+      { exercise: 'push-ups', order_num: 1, reps: 15, load: 0 },
+      { exercise: 'push-ups', order_num: 2, reps: 15, load: 0 },
+      { exercise: 'push-ups', order_num: 3, reps: 15, load: 0 },
+      { exercise: 'pull-ups', order_num: 4, reps: 8, load: 0 },
+      { exercise: 'pull-ups', order_num: 5, reps: 8, load: 0 },
+      { exercise: 'pull-ups', order_num: 6, reps: 8, load: 0 },
+      { exercise: 'bench press', order_num: 7, reps: 10, load: 135 },
+      { exercise: 'bench press', order_num: 8, reps: 10, load: 135 },
+      { exercise: 'bench press', order_num: 9, reps: 10, load: 135 },
+      { exercise: 'overhead press', order_num: 10, reps: 8, load: 95 },
+      { exercise: 'overhead press', order_num: 11, reps: 8, load: 95 },
+      { exercise: 'overhead press', order_num: 12, reps: 8, load: 95 },
+      { exercise: 'rows', order_num: 13, reps: 12, load: 115 },
+      { exercise: 'rows', order_num: 14, reps: 12, load: 115 },
+      { exercise: 'rows', order_num: 15, reps: 12, load: 115 },
+      { exercise: 'dips', order_num: 16, reps: 12, load: 0 },
+      { exercise: 'dips', order_num: 17, reps: 12, load: 0 }
+    ],
+    // Day 2 (yesterday) - Lower Body Focus
+    [
+      { exercise: 'squats', order_num: 1, reps: 12, load: 185 },
+      { exercise: 'squats', order_num: 2, reps: 12, load: 185 },
+      { exercise: 'squats', order_num: 3, reps: 12, load: 185 },
+      { exercise: 'squats', order_num: 4, reps: 12, load: 185 },
+      { exercise: 'deadlifts', order_num: 5, reps: 8, load: 225 },
+      { exercise: 'deadlifts', order_num: 6, reps: 8, load: 225 },
+      { exercise: 'deadlifts', order_num: 7, reps: 8, load: 225 },
+      { exercise: 'bodyweight squats', order_num: 8, reps: 20, load: 0 },
+      { exercise: 'bodyweight squats', order_num: 9, reps: 20, load: 0 },
+      { exercise: 'walking lunges', order_num: 10, reps: 16, load: 0 },
+      { exercise: 'walking lunges', order_num: 11, reps: 16, load: 0 },
+      { exercise: 'walking lunges', order_num: 12, reps: 16, load: 0 },
+      { exercise: 'calf raises', order_num: 13, reps: 15, load: 45 },
+      { exercise: 'calf raises', order_num: 14, reps: 15, load: 45 },
+      { exercise: 'calf raises', order_num: 15, reps: 15, load: 45 },
+      { exercise: 'plank', order_num: 16, reps: 45, load: 0 },
+      { exercise: 'plank', order_num: 17, reps: 45, load: 0 },
+      { exercise: 'plank', order_num: 18, reps: 45, load: 0 }
+    ],
+    // Day 3 (today) - Full Body/Conditioning
+    [
+      { exercise: 'burpees', order_num: 1, reps: 10, load: 0 },
+      { exercise: 'burpees', order_num: 2, reps: 10, load: 0 },
+      { exercise: 'burpees', order_num: 3, reps: 10, load: 0 },
+      { exercise: 'burpees', order_num: 4, reps: 10, load: 0 },
+      { exercise: 'push-ups', order_num: 5, reps: 12, load: 0 },
+      { exercise: 'push-ups', order_num: 6, reps: 12, load: 0 },
+      { exercise: 'push-ups', order_num: 7, reps: 12, load: 0 },
+      { exercise: 'pull-ups', order_num: 8, reps: 6, load: 0 },
+      { exercise: 'pull-ups', order_num: 9, reps: 6, load: 0 },
+      { exercise: 'pull-ups', order_num: 10, reps: 6, load: 0 },
+      { exercise: 'bodyweight squats', order_num: 11, reps: 15, load: 0 },
+      { exercise: 'bodyweight squats', order_num: 12, reps: 15, load: 0 },
+      { exercise: 'bodyweight squats', order_num: 13, reps: 15, load: 0 },
+      { exercise: 'mountain climbers', order_num: 14, reps: 20, load: 0 },
+      { exercise: 'mountain climbers', order_num: 15, reps: 20, load: 0 },
+      { exercise: 'mountain climbers', order_num: 16, reps: 20, load: 0 },
+      { exercise: 'plank', order_num: 17, reps: 60, load: 0 },
+      { exercise: 'plank', order_num: 18, reps: 60, load: 0 },
+      { exercise: 'plank', order_num: 19, reps: 60, load: 0 }
+    ]
   ];
 
-  plannedSets.forEach(set => {
-    const exerciseId = exerciseIds[set.exercise];
-    db.prepare('INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES (?, ?, ?, ?, ?)')
-      .run(logId, exerciseId, set.order_num, set.reps, set.load);
-  });
-  console.log(`Added ${plannedSets.length} planned sets for today`);
-
-  // Add planned sets for yesterday
-  const yesterdayPlannedSets = [
-    { exercise: 'bench press', order_num: 1, reps: 8, load: 50 },
-    { exercise: 'bench press', order_num: 2, reps: 6, load: 70 },
-    { exercise: 'squat', order_num: 3, reps: 8, load: 100 },
-    { exercise: 'squat', order_num: 4, reps: 6, load: 140 },
-    { exercise: 'deadlift', order_num: 5, reps: 5, load: 140 },
-    { exercise: 'deadlift', order_num: 6, reps: 3, load: 190 }
+  // Add completed sets for each day
+  const completedSetsData = [
+    // Day 1 (2 days ago) - All completed
+    [
+      { exercise: 'push-ups', reps_done: 15, load_done: 0 },
+      { exercise: 'push-ups', reps_done: 15, load_done: 0 },
+      { exercise: 'push-ups', reps_done: 15, load_done: 0 },
+      { exercise: 'pull-ups', reps_done: 8, load_done: 0 },
+      { exercise: 'pull-ups', reps_done: 8, load_done: 0 },
+      { exercise: 'pull-ups', reps_done: 8, load_done: 0 },
+      { exercise: 'bench press', reps_done: 10, load_done: 135 },
+      { exercise: 'bench press', reps_done: 10, load_done: 135 },
+      { exercise: 'bench press', reps_done: 10, load_done: 135 },
+      { exercise: 'overhead press', reps_done: 8, load_done: 95 },
+      { exercise: 'overhead press', reps_done: 8, load_done: 95 },
+      { exercise: 'overhead press', reps_done: 8, load_done: 95 },
+      { exercise: 'rows', reps_done: 12, load_done: 115 },
+      { exercise: 'rows', reps_done: 12, load_done: 115 },
+      { exercise: 'rows', reps_done: 12, load_done: 115 },
+      { exercise: 'dips', reps_done: 12, load_done: 0 },
+      { exercise: 'dips', reps_done: 12, load_done: 0 }
+    ],
+    // Day 2 (yesterday) - Most completed
+    [
+      { exercise: 'squats', reps_done: 12, load_done: 185 },
+      { exercise: 'squats', reps_done: 12, load_done: 185 },
+      { exercise: 'squats', reps_done: 12, load_done: 185 },
+      { exercise: 'squats', reps_done: 12, load_done: 185 },
+      { exercise: 'deadlifts', reps_done: 8, load_done: 225 },
+      { exercise: 'deadlifts', reps_done: 8, load_done: 225 },
+      // Third deadlift set skipped
+      { exercise: 'bodyweight squats', reps_done: 20, load_done: 0 },
+      { exercise: 'bodyweight squats', reps_done: 20, load_done: 0 },
+      { exercise: 'walking lunges', reps_done: 16, load_done: 0 },
+      { exercise: 'walking lunges', reps_done: 16, load_done: 0 },
+      { exercise: 'walking lunges', reps_done: 16, load_done: 0 },
+      { exercise: 'calf raises', reps_done: 15, load_done: 45 },
+      { exercise: 'calf raises', reps_done: 15, load_done: 45 },
+      { exercise: 'calf raises', reps_done: 15, load_done: 45 },
+      { exercise: 'plank', reps_done: 45, load_done: 0 },
+      { exercise: 'plank', reps_done: 45, load_done: 0 },
+      { exercise: 'plank', reps_done: 45, load_done: 0 }
+    ],
+    // Day 3 (today) - Partially completed
+    [
+      { exercise: 'burpees', reps_done: 10, load_done: 0 },
+      { exercise: 'burpees', reps_done: 10, load_done: 0 },
+      { exercise: 'push-ups', reps_done: 12, load_done: 0 },
+      { exercise: 'pull-ups', reps_done: 6, load_done: 0 },
+      { exercise: 'bodyweight squats', reps_done: 15, load_done: 0 },
+      { exercise: 'mountain climbers', reps_done: 20, load_done: 0 },
+      { exercise: 'plank', reps_done: 60, load_done: 0 }
+    ]
   ];
 
-  yesterdayPlannedSets.forEach(set => {
-    const exerciseId = exerciseIds[set.exercise];
-    db.prepare('INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES (?, ?, ?, ?, ?)')
-      .run(yesterdayLogId, exerciseId, set.order_num, set.reps, set.load);
-  });
-  console.log(`Added ${yesterdayPlannedSets.length} planned sets for yesterday`);
+  // Insert planned sets for all days
+  let totalPlanned = 0;
+  for (let i = 0; i < 3; i++) {
+    plannedSetsData[i].forEach(set => {
+      const exerciseId = exerciseIds[set.exercise];
+      db.prepare('INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES (?, ?, ?, ?, ?)')
+        .run(logIds[i], exerciseId, set.order_num, set.reps, set.load);
+      totalPlanned++;
+    });
+    console.log(`Added ${plannedSetsData[i].length} planned sets for ${dates[i]}`);
+  }
 
-  // Add some completed sets
-  const completedSets = [
-    { exercise: 'bench press', reps_done: 10, load_done: 45 },
-    { exercise: 'bench press', reps_done: 8, load_done: 65 },
-    { exercise: 'squat', reps_done: 10, load_done: 95 },
-    { exercise: 'deadlift', reps_done: 5, load_done: 135 }
-  ];
-
-  completedSets.forEach(set => {
-    const exerciseId = exerciseIds[set.exercise];
-    db.prepare('INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done) VALUES (?, ?, ?, ?)')
-      .run(logId, exerciseId, set.reps_done, set.load_done);
-  });
-  console.log(`Added ${completedSets.length} completed sets for today`);
-
-  // Add completed sets for yesterday (complete workout)
-  const yesterdayCompletedSets = [
-    { exercise: 'bench press', reps_done: 8, load_done: 50 },
-    { exercise: 'bench press', reps_done: 6, load_done: 70 },
-    { exercise: 'squat', reps_done: 8, load_done: 100 },
-    { exercise: 'squat', reps_done: 6, load_done: 140 },
-    { exercise: 'deadlift', reps_done: 5, load_done: 140 },
-    { exercise: 'deadlift', reps_done: 3, load_done: 190 }
-  ];
-
-  yesterdayCompletedSets.forEach(set => {
-    const exerciseId = exerciseIds[set.exercise];
-    db.prepare('INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done) VALUES (?, ?, ?, ?)')
-      .run(yesterdayLogId, exerciseId, set.reps_done, set.load_done);
-  });
-  console.log(`Added ${yesterdayCompletedSets.length} completed sets for yesterday`);
+  // Insert completed sets for all days
+  let totalCompleted = 0;
+  for (let i = 0; i < 3; i++) {
+    completedSetsData[i].forEach(set => {
+      const exerciseId = exerciseIds[set.exercise];
+      db.prepare('INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done) VALUES (?, ?, ?, ?)')
+        .run(logIds[i], exerciseId, set.reps_done, set.load_done);
+      totalCompleted++;
+    });
+    console.log(`Added ${completedSetsData[i].length} completed sets for ${dates[i]}`);
+  }
 
   console.log('Sample data loaded successfully!');
   console.log('Database contains:');
-  console.log('- 3 exercises');
-  console.log('- 15 planned sets (9 for today, 6 for yesterday)');
-  console.log('- 10 completed sets (4 for today, 6 for yesterday)');
-  console.log('- 2 daily logs (today and yesterday)');
+  console.log(`- ${exercises.length} exercises`);
+  console.log(`- ${totalPlanned} planned sets across 3 workouts`);
+  console.log(`- ${totalCompleted} completed sets`);
+  console.log(`- 3 daily logs (${dates[0]}, ${dates[1]}, ${dates[2]})`);
+  console.log(`- Day 1 (${dates[0]}): Upper body focus - 17 planned, 17 completed`);
+  console.log(`- Day 2 (${dates[1]}): Lower body focus - 18 planned, 17 completed`);
+  console.log(`- Day 3 (${dates[2]}): Full body conditioning - 19 planned, 7 completed`);
 }
 
 // Run the script

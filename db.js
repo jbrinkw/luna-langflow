@@ -127,9 +127,10 @@ async function getDay(id) {
     `, [id]);
     
     const completedResult = await client.query(`
-      SELECT cs.id, e.name as exercise, cs.reps_done, cs.load_done
+      SELECT cs.id, e.name as exercise, cs.reps_done, cs.load_done, cs.completed_at
       FROM completed_sets cs JOIN exercises e ON cs.exercise_id = e.id
       WHERE cs.log_id = $1
+      ORDER BY cs.completed_at DESC NULLS LAST
     `, [id]);
     
     return {
@@ -182,8 +183,10 @@ async function addCompleted(logId, item) {
   const client = await pool.connect();
   try {
     const exId = await getExerciseId(item.exercise);
+    
+    // Database server clock is 4 hours fast, so subtract 4 hours from CURRENT_TIMESTAMP
     const result = await client.query(
-      'INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done) VALUES ($1, $2, $3, $4) RETURNING id',
+      'INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done, completed_at) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP - INTERVAL \'4 hours\') RETURNING id',
       [logId, exId, item.reps_done, item.load_done]
     );
     return result.rows[0].id;

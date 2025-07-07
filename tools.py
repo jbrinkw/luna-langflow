@@ -5,6 +5,12 @@ import psycopg2.extras
 from db import get_connection, get_today_log_id
 from agents import function_tool
 
+def get_corrected_time():
+    """Get current time corrected for server clock being 4 hours fast"""
+    server_time = datetime.now()
+    corrected_time = server_time - timedelta(hours=4)
+    return corrected_time
+
 # Helper validation
 MAX_LOAD = 2000
 MAX_REPS = 100
@@ -76,13 +82,109 @@ def log_completed_set(exercise: str, reps: int, load: float):
         log_id = get_today_log_id(conn)
         exercise_id = _get_exercise_id(conn, exercise)
         cur.execute(
-            "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done) VALUES (%s, %s, %s, %s)",
+            "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done, completed_at) VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP - INTERVAL '4 hours')",
             (log_id, exercise_id, reps, load),
         )
         conn.commit()
     finally:
         conn.close()
     return "logged"
+
+
+@function_tool(strict_mode=False)
+def complete_planned_set(exercise: Optional[str] = None, reps: Optional[int] = None, load: Optional[float] = None):
+    """Complete the next planned set, optionally overriding the planned values."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        log_id = get_today_log_id(conn)
+        
+        # Find the next planned set to complete
+        if exercise:
+            # Complete specific exercise
+            cur.execute("""
+                WITH exercise_counts AS (
+                    SELECT 
+                        ps.exercise_id,
+                        COUNT(ps.id) as planned_count,
+                        COALESCE(cs_count.completed_count, 0) as completed_count
+                    FROM planned_sets ps
+                    LEFT JOIN (
+                        SELECT exercise_id, COUNT(*) as completed_count
+                        FROM completed_sets
+                        WHERE log_id = %s
+                        GROUP BY exercise_id
+                    ) cs_count ON cs_count.exercise_id = ps.exercise_id
+                    WHERE ps.log_id = %s
+                    GROUP BY ps.exercise_id, cs_count.completed_count
+                )
+                SELECT ps.id, ps.exercise_id, e.name as exercise, ps.reps, ps.load, ps.order_num
+                FROM planned_sets ps
+                JOIN exercises e ON ps.exercise_id = e.id
+                JOIN exercise_counts ec ON ec.exercise_id = ps.exercise_id
+                WHERE ps.log_id = %s AND e.name = %s AND ec.completed_count < ec.planned_count
+                ORDER BY ps.order_num
+                LIMIT 1
+            """, (log_id, log_id, log_id, exercise))
+        else:
+            # Complete next planned set in order
+            cur.execute("""
+                WITH exercise_counts AS (
+                    SELECT 
+                        ps.exercise_id,
+                        COUNT(ps.id) as planned_count,
+                        COALESCE(cs_count.completed_count, 0) as completed_count
+                    FROM planned_sets ps
+                    LEFT JOIN (
+                        SELECT exercise_id, COUNT(*) as completed_count
+                        FROM completed_sets
+                        WHERE log_id = %s
+                        GROUP BY exercise_id
+                    ) cs_count ON cs_count.exercise_id = ps.exercise_id
+                    WHERE ps.log_id = %s
+                    GROUP BY ps.exercise_id, cs_count.completed_count
+                )
+                SELECT ps.id, ps.exercise_id, e.name as exercise, ps.reps, ps.load, ps.order_num
+                FROM planned_sets ps
+                JOIN exercises e ON ps.exercise_id = e.id
+                JOIN exercise_counts ec ON ec.exercise_id = ps.exercise_id
+                WHERE ps.log_id = %s AND ec.completed_count < ec.planned_count
+                ORDER BY ps.order_num
+                LIMIT 1
+            """, (log_id, log_id, log_id))
+        
+        planned_set = cur.fetchone()
+        if not planned_set:
+            if exercise:
+                return f"No incomplete planned set found for exercise: {exercise}"
+            else:
+                return "No incomplete planned sets found for today"
+        
+        # Use planned values as defaults, override if provided
+        actual_reps = reps if reps is not None else planned_set['reps']
+        actual_load = load if load is not None else planned_set['load']
+        
+        # Validate overrides
+        if not (1 <= actual_reps <= MAX_REPS):
+            raise ValueError("reps out of range")
+        if not (0 <= actual_load <= MAX_LOAD):
+            raise ValueError("load out of range")
+        
+        # Record the completion
+        cur.execute(
+            "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done, completed_at) VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP - INTERVAL '4 hours')",
+            (log_id, planned_set['exercise_id'], actual_reps, actual_load),
+        )
+        conn.commit()
+        
+        # Return completion summary
+        result = f"Completed {planned_set['exercise']}: {actual_reps} reps @ {actual_load} load"
+        if reps is not None or load is not None:
+            result += f" (planned: {planned_set['reps']} reps @ {planned_set['load']} load)"
+        return result
+        
+    finally:
+        conn.close()
 
 
 @function_tool(strict_mode=False)
@@ -124,9 +226,8 @@ def get_recent_history(days: int) -> List[Dict[str, Any]]:
     return rows
 
 
-@function_tool(strict_mode=False)
-def run_sql(query: str, params: Optional[Dict[str, Any]] = None, confirm: bool = False):
-    """Run arbitrary SQL. Reject mutations unless confirm=True"""
+def _execute_sql(query: str, params: Optional[Dict[str, Any]] = None, confirm: bool = False):
+    """Internal SQL execution function"""
     if params is None:
         params = {}
     lowered = query.strip().lower()
@@ -154,11 +255,17 @@ def run_sql(query: str, params: Optional[Dict[str, Any]] = None, confirm: bool =
 
 
 @function_tool(strict_mode=False)
+def run_sql(query: str, params: Optional[Dict[str, Any]] = None, confirm: bool = False):
+    """Run arbitrary SQL. Reject mutations unless confirm=True"""
+    return _execute_sql(query, params, confirm)
+
+
+@function_tool(strict_mode=False)
 def arbitrary_update(query: str, params: Optional[Dict[str, Any]] = None):
     """Execute a confirmed SQL statement for updates or inserts."""
     if params is None:
         params = {}
-    return run_sql(query, params=params, confirm=True)
+    return _execute_sql(query, params=params, confirm=True)
 
 
 @function_tool(strict_mode=False)
@@ -173,8 +280,8 @@ def set_timer(minutes: int):
         # Clear any existing timers first
         cur.execute("DELETE FROM timer")
         
-        # Calculate end time
-        end_time = datetime.now() + timedelta(minutes=minutes)
+        # Calculate end time using corrected time
+        end_time = get_corrected_time() + timedelta(minutes=minutes)
         
         # Insert new timer
         cur.execute(
@@ -204,7 +311,7 @@ def get_timer() -> Dict[str, Any]:
         
         end_time = row['timer_end_time']
         created_at = row['created_at']
-        now = datetime.now()
+        now = get_corrected_time()
         
         if now >= end_time:
             # Timer has expired
@@ -236,6 +343,7 @@ __all__ = [
     "new_daily_plan",
     "get_today_plan",
     "log_completed_set",
+    "complete_planned_set",
     "update_summary",
     "get_recent_history",
     "run_sql",

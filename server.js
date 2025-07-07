@@ -10,8 +10,8 @@ app.use(express.json());
 // Serve static files from the current directory
 app.use(express.static('.'));
 
-// Initialize database schema (without sample data)
-db.initDb(false);
+// Database is initialized via Python scripts
+// db.initDb(false);
 
 app.get('/api/days', async (req, res) => {
   try {
@@ -88,7 +88,22 @@ app.delete('/api/plan/:id', async (req, res) => {
 app.post('/api/days/:id/completed', async (req, res) => {
   try {
     const id = await db.addCompleted(req.params.id, req.body);
-    res.json({ id });
+    
+    // Return the complete data including timestamp
+    const dayData = await db.getDay(req.params.id);
+    const completedSet = dayData.completed.find(c => c.id === id);
+    
+    if (completedSet) {
+      res.json({
+        id: completedSet.id,
+        exercise: completedSet.exercise,
+        reps_done: completedSet.reps_done,
+        load_done: completedSet.load_done,
+        completed_at: completedSet.completed_at
+      });
+    } else {
+      res.json({ id });
+    }
   } catch (error) {
     console.error('Error adding completed set:', error);
     res.status(500).json({ error: 'Failed to add completed set' });

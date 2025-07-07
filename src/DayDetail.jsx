@@ -5,28 +5,66 @@ export default function DayDetail({ id, onBack }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [newPlan, setNewPlan] = useState({ exercise: '', reps: 0, load: 0, order_num: 1 });
-  const [newComp, setNewComp] = useState({ exercise: '', reps_done: 0, load_done: 0 });
+  const [completionForm, setCompletionForm] = useState({ exercise: '', reps_done: 0, load_done: 0 });
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  const load = () => {
-    setLoading(true);
-    setError(null);
-    fetch(`/api/days/${id}`)
-      .then(r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then(data => {
-        setData(data);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error('Error loading day data:', err);
-        setError(err.message);
-        setLoading(false);
+  const load = async (showLoading = true) => {
+    if (showLoading) {
+      setLoading(true);
+      setError(null);
+    }
+    
+    try {
+      const response = await fetch(`/api/days/${id}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const newData = await response.json();
+      
+      // Only update if data has actually changed
+      setData(prevData => {
+        const newDataString = JSON.stringify(newData);
+        const currentDataString = JSON.stringify(prevData);
+        
+        if (newDataString !== currentDataString) {
+          setLastUpdated(new Date());
+          
+          // Pre-fill completion form with next set in queue
+          if (newData.plan && newData.plan.length > 0) {
+            const nextSet = newData.plan[0]; // First set in queue
+            setCompletionForm({
+              exercise: nextSet.exercise,
+              reps_done: nextSet.reps,
+              load_done: nextSet.load
+            });
+          }
+          
+          return newData;
+        }
+        return prevData;
       });
+      
+      if (showLoading) {
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error('Error loading day data:', err);
+      setError(err.message);
+      if (showLoading) {
+        setLoading(false);
+      }
+    }
   };
   
-  useEffect(load, [id]);
+  useEffect(() => {
+    // Initial load
+    load(true);
+    
+    // Set up polling every 3 seconds
+    const interval = setInterval(() => load(false), 3000);
+    
+    // Cleanup interval on unmount
+    return () => clearInterval(interval);
+  }, [id]);
 
   if (loading) return <div><button onClick={onBack}>Back</button><p>Loading day details...</p></div>;
   if (error) return <div><button onClick={onBack}>Back</button><p>Error loading day: {error}</p></div>;
@@ -35,13 +73,39 @@ export default function DayDetail({ id, onBack }) {
   const addPlan = async () => {
     await fetch(`/api/days/${id}/plan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newPlan) });
     setNewPlan({ exercise: '', reps: 0, load: 0, order_num: 1 });
-    load();
+    load(false); // Don't show loading spinner for user-initiated actions
   };
-  const addCompleted = async () => {
-    await fetch(`/api/days/${id}/completed`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newComp) });
-    setNewComp({ exercise: '', reps_done: 0, load_done: 0 });
-    load();
+
+  const completeSet = async () => {
+    if (data.plan.length === 0) return;
+    
+    setIsCompleting(true);
+    try {
+      // Add to completed sets
+      await fetch(`/api/days/${id}/completed`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(completionForm) 
+      });
+      
+      // Remove the first planned set (next in queue)
+      const nextSetId = data.plan[0].id;
+      await fetch(`/api/plan/${nextSetId}`, { method: 'DELETE' });
+      
+      // Refresh data
+      load(false);
+    } catch (err) {
+      console.error('Error completing set:', err);
+    } finally {
+      setIsCompleting(false);
+    }
   };
+
+  const handleCompletionFormSubmit = (e) => {
+    e.preventDefault();
+    completeSet();
+  };
+
   const updateSummary = async () => {
     await fetch(`/api/days/${id}/summary`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ summary: data.log.summary }) });
   };
@@ -49,9 +113,8 @@ export default function DayDetail({ id, onBack }) {
   const updatePlan = async (p) => {
     await fetch(`/api/plan/${p.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) });
   };
-  const deletePlan = async (pid) => { await fetch(`/api/plan/${pid}`, { method: 'DELETE' }); load(); };
-  const updateComp = async (c) => { await fetch(`/api/completed/${c.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(c) }); };
-  const deleteComp = async (cid) => { await fetch(`/api/completed/${cid}`, { method: 'DELETE' }); load(); };
+  const deletePlan = async (pid) => { await fetch(`/api/plan/${pid}`, { method: 'DELETE' }); load(false); };
+  const deleteComp = async (cid) => { await fetch(`/api/completed/${cid}`, { method: 'DELETE' }); load(false); };
 
   const handlePlanChange = (idx, field, value) => {
     const upd = { ...data.plan[idx], [field]: value };
@@ -60,12 +123,9 @@ export default function DayDetail({ id, onBack }) {
     setData({ ...data, plan: copy });
     updatePlan(upd);
   };
-  const handleCompChange = (idx, field, value) => {
-    const upd = { ...data.completed[idx], [field]: value };
-    const copy = [...data.completed];
-    copy[idx] = upd;
-    setData({ ...data, completed: copy });
-    updateComp(upd);
+
+  const handleCompletionChange = (field, value) => {
+    setCompletionForm(prev => ({ ...prev, [field]: value }));
   };
 
   // Styles
@@ -94,17 +154,53 @@ export default function DayDetail({ id, onBack }) {
     cursor: 'pointer'
   };
 
-  const tablesContainerStyle = {
+  const workoutSectionStyle = {
     display: 'flex',
     gap: '20px',
     marginBottom: '20px'
   };
 
-  const tableWrapperStyle = {
+  const queueSectionStyle = {
     flex: 1,
     border: '1px solid #ddd',
     borderRadius: '8px',
     overflow: 'hidden'
+  };
+
+  const completedSectionStyle = {
+    flex: 1,
+    border: '1px solid #ddd',
+    borderRadius: '8px',
+    overflow: 'hidden'
+  };
+
+  const completionSectionStyle = {
+    border: '1px solid #28a745',
+    borderRadius: '8px',
+    padding: '20px',
+    marginBottom: '20px',
+    backgroundColor: '#f8fff8'
+  };
+
+  const nextSetStyle = {
+    backgroundColor: '#e8f5e8',
+    padding: '15px',
+    borderRadius: '6px',
+    marginBottom: '15px',
+    border: '2px solid #28a745'
+  };
+
+  const completionFormStyle = {
+    display: 'flex',
+    gap: '10px',
+    alignItems: 'end',
+    flexWrap: 'wrap'
+  };
+
+  const formGroupStyle = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '5px'
   };
 
   const tableHeaderStyle = {
@@ -171,6 +267,17 @@ export default function DayDetail({ id, onBack }) {
     backgroundColor: '#28a745'
   };
 
+  const completeButtonStyle = {
+    padding: '10px 20px',
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 'bold'
+  };
+
   const summaryStyle = {
     border: '1px solid #ddd',
     borderRadius: '8px',
@@ -187,17 +294,83 @@ export default function DayDetail({ id, onBack }) {
     resize: 'vertical'
   };
 
+  const nextSet = data.plan.length > 0 ? data.plan[0] : null;
+
   return (
     <div style={containerStyle}>
       <div style={headerStyle}>
-        <h2 style={{ margin: 0 }}>Workout Day: {data.log.log_date}</h2>
+        <div>
+          <h2 style={{ margin: 0 }}>Workout Day: {data.log.log_date}</h2>
+          {lastUpdated && (
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              Last updated: {lastUpdated.toLocaleTimeString()}
+            </div>
+          )}
+        </div>
         <button style={backButtonStyle} onClick={onBack}>← Back</button>
       </div>
       
-      <div style={tablesContainerStyle}>
-        {/* Planned Sets */}
-        <div style={tableWrapperStyle}>
-          <h3 style={tableHeaderStyle}>📋 Planned Sets</h3>
+      {/* Complete Set Section */}
+      <div style={completionSectionStyle}>
+        <h3 style={{ marginTop: 0, marginBottom: '15px' }}>🎯 Complete Set</h3>
+        
+        {nextSet ? (
+          <div style={nextSetStyle}>
+            <h4 style={{ margin: '0 0 8px 0', color: '#155724' }}>Next in Queue:</h4>
+            <p style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>
+              {nextSet.exercise} - {nextSet.reps} reps @ {nextSet.load} lbs
+            </p>
+          </div>
+        ) : (
+          <div style={{ ...nextSetStyle, backgroundColor: '#f8f9fa', borderColor: '#6c757d' }}>
+            <p style={{ margin: 0, color: '#6c757d' }}>🎉 All sets completed!</p>
+          </div>
+        )}
+
+        {nextSet && (
+          <form onSubmit={handleCompletionFormSubmit} style={completionFormStyle}>
+            <div style={formGroupStyle}>
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Exercise</label>
+              <input
+                style={{ ...inputStyle, width: '150px' }}
+                value={completionForm.exercise}
+                onChange={e => handleCompletionChange('exercise', e.target.value)}
+                placeholder="Exercise name"
+              />
+            </div>
+            <div style={formGroupStyle}>
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Reps Done</label>
+              <input
+                style={numberInputStyle}
+                type="number"
+                value={completionForm.reps_done}
+                onChange={e => handleCompletionChange('reps_done', parseInt(e.target.value) || 0)}
+              />
+            </div>
+            <div style={formGroupStyle}>
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Weight (lbs)</label>
+              <input
+                style={numberInputStyle}
+                type="number"
+                value={completionForm.load_done}
+                onChange={e => handleCompletionChange('load_done', parseFloat(e.target.value) || 0)}
+              />
+            </div>
+            <button
+              type="submit"
+              style={completeButtonStyle}
+              disabled={isCompleting}
+            >
+              {isCompleting ? 'Completing...' : '✓ Complete Set'}
+            </button>
+          </form>
+        )}
+      </div>
+
+      <div style={workoutSectionStyle}>
+        {/* Set Queue */}
+        <div style={queueSectionStyle}>
+          <h3 style={tableHeaderStyle}>📋 Set Queue ({data.plan.length} remaining)</h3>
           <table style={tableStyle}>
             <thead>
               <tr>
@@ -210,7 +383,7 @@ export default function DayDetail({ id, onBack }) {
             </thead>
             <tbody>
               {data.plan.map((p, i) => (
-                <tr key={p.id}>
+                <tr key={p.id} style={i === 0 ? { backgroundColor: '#e8f5e8' } : {}}>
                   <td style={tdStyle}>
                     <input 
                       style={inputStyle}
@@ -247,7 +420,7 @@ export default function DayDetail({ id, onBack }) {
                       style={buttonStyle}
                       onClick={() => {deletePlan(p.id);}}
                     >
-                      Delete
+                      Remove
                     </button>
                   </td>
                 </tr>
@@ -298,88 +471,63 @@ export default function DayDetail({ id, onBack }) {
           </table>
         </div>
 
-        {/* Completed Sets */}
-        <div style={tableWrapperStyle}>
-          <h3 style={tableHeaderStyle}>✅ Completed Sets</h3>
+        {/* Completed Sets Log */}
+        <div style={completedSectionStyle}>
+          <h3 style={tableHeaderStyle}>✅ Completed Sets ({data.completed.length} done)</h3>
           <table style={tableStyle}>
             <thead>
               <tr>
                 <th style={thStyle}>Exercise</th>
                 <th style={thStyle}>Reps</th>
                 <th style={thStyle}>Load</th>
+                <th style={thStyle}>Time</th>
                 <th style={thStyle}>Action</th>
               </tr>
             </thead>
             <tbody>
-              {data.completed.map((c,i) => (
+              {data.completed.map((c) => (
                 <tr key={c.id}>
                   <td style={tdStyle}>
-                    <input 
-                      style={inputStyle}
-                      value={c.exercise} 
-                      onChange={e => handleCompChange(i,'exercise', e.target.value)} 
-                    />
+                    <strong>{c.exercise}</strong>
                   </td>
                   <td style={tdStyle}>
-                    <input 
-                      style={numberInputStyle}
-                      type="number" 
-                      value={c.reps_done} 
-                      onChange={e => handleCompChange(i,'reps_done', e.target.value)} 
-                    />
+                    <strong>{c.reps_done}</strong>
                   </td>
                   <td style={tdStyle}>
-                    <input 
-                      style={numberInputStyle}
-                      type="number" 
-                      value={c.load_done} 
-                      onChange={e => handleCompChange(i,'load_done', e.target.value)} 
-                    />
+                    <strong>{c.load_done}</strong>
+                  </td>
+                  <td style={tdStyle}>
+                    <span style={{ fontSize: '12px', color: '#666' }}>
+                      {(() => {
+                        const date = new Date(c.completed_at);
+                        // Convert UTC timestamp to Eastern Time
+                        const options = { 
+                          hour: '2-digit', 
+                          minute: '2-digit',
+                          hour12: true,
+                          timeZone: 'America/New_York'
+                        };
+                        return date.toLocaleTimeString('en-US', options);
+                      })()}
+                    </span>
                   </td>
                   <td style={tdStyle}>
                     <button 
                       style={buttonStyle}
                       onClick={() => {deleteComp(c.id);}}
                     >
-                      Delete
+                      Remove
                     </button>
                   </td>
                 </tr>
               ))}
-              <tr style={{ backgroundColor: '#f8f9fa' }}>
-                <td style={tdStyle}>
-                  <input 
-                    style={inputStyle}
-                    value={newComp.exercise} 
-                    onChange={e => setNewComp({...newComp, exercise:e.target.value})} 
-                    placeholder="Exercise name"
-                  />
-                </td>
-                <td style={tdStyle}>
-                  <input 
-                    style={numberInputStyle}
-                    type="number" 
-                    value={newComp.reps_done} 
-                    onChange={e => setNewComp({...newComp, reps_done:e.target.value})} 
-                  />
-                </td>
-                <td style={tdStyle}>
-                  <input 
-                    style={numberInputStyle}
-                    type="number" 
-                    value={newComp.load_done} 
-                    onChange={e => setNewComp({...newComp, load_done:e.target.value})} 
-                  />
-                </td>
-                <td style={tdStyle}>
-                  <button 
-                    style={addButtonStyle}
-                    onClick={addCompleted}
-                  >
-                    Add
-                  </button>
-                </td>
-              </tr>
+              {data.completed.length === 0 && (
+                <tr>
+                  <td colSpan="5" style={{ ...tdStyle, textAlign: 'center', color: '#666', fontStyle: 'italic' }}>
+                    No sets completed yet
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

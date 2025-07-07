@@ -166,7 +166,7 @@ sudo ufw allow from 192.168.1.0/24 to any port 5432
 
 The system includes comprehensive 3-day MMA workout data:
 - **14 exercises** (bodyweight + weighted)
-- **3 daily logs** (July 2-4, 2025)
+- **3 daily logs** (current day and 2 previous days)
 - **54 planned sets** across 3 workouts
 - **Realistic completion data** with some missed sets
 

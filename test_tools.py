@@ -1,5 +1,5 @@
 import db
-import sqlite3
+import psycopg2.extras
 from db import get_connection
 import tools
 from agent import create_agent
@@ -13,7 +13,8 @@ def reset_db():
 def query(sql: str, params: tuple | None = None):
     conn = get_connection()
     try:
-        cur = conn.execute(sql, params or ())
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(sql, params or ())
         return [dict(row) for row in cur.fetchall()]
     finally:
         conn.close()
@@ -38,6 +39,16 @@ def run_tests():
     res = Runner.run_sync(agent, "I just finished a bench press set of 10 reps at 100 pounds.")
     print(res.final_output)
     print("After:", query("SELECT * FROM completed_sets"))
+
+    print("-- Complete planned set with defaults --")
+    res = Runner.run_sync(agent, "Complete the next planned set using the planned values.")
+    print(res.final_output)
+    print("Completed sets:", query("SELECT cs.id, e.name, cs.reps_done, cs.load_done FROM completed_sets cs JOIN exercises e ON cs.exercise_id = e.id"))
+
+    print("-- Complete planned set with overrides --")
+    res = Runner.run_sync(agent, "Complete the next planned set but I only did 6 reps instead of the planned amount.")
+    print(res.final_output)
+    print("Final completed sets:", query("SELECT cs.id, e.name, cs.reps_done, cs.load_done FROM completed_sets cs JOIN exercises e ON cs.exercise_id = e.id"))
 
     print("-- Update summary --")
     print("Before:", query("SELECT summary FROM daily_logs"))
