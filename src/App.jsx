@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import DayDetail from './DayDetail';
+import ChatBar from './ChatBar';
 
 export default function App() {
   const [days, setDays] = useState([]);
@@ -148,78 +149,81 @@ export default function App() {
   };
 
   return (
-    <div style={containerStyle}>
-      {!selected && (
-        <div>
-          <div style={headerStyle}>
-            <h1 style={titleStyle}>🏋️ Workout Tracker</h1>
-            {lastUpdated && (
-              <div style={{ fontSize: '12px', color: '#666' }}>
-                Last updated: {lastUpdated.toLocaleTimeString()}
+    <>
+      <div style={containerStyle}>
+        {!selected && (
+          <div>
+            <div style={headerStyle}>
+              <h1 style={titleStyle}>🏋️ Workout Tracker</h1>
+              {lastUpdated && (
+                <div style={{ fontSize: '12px', color: '#666' }}>
+                  Last updated: {lastUpdated.toLocaleTimeString()}
+                </div>
+              )}
+            </div>
+            
+            {loading && (
+              <div style={loadingStyle}>
+                <p>Loading workout days...</p>
               </div>
             )}
-          </div>
-          
-          {loading && (
-            <div style={loadingStyle}>
-              <p>Loading workout days...</p>
-            </div>
-          )}
-          
-          {!loading && days.length === 0 && (
-            <div style={emptyStateStyle}>
-              <h3>No workout days found</h3>
-              <p>Get started by loading some sample data:</p>
-              <p>Run <code style={codeStyle}>npm run load-sample</code> to load sample data.</p>
-            </div>
-          )}
-          
-          {!loading && days.length > 0 && (
-            <table style={tableStyle}>
-              <thead>
-                <tr>
-                  <th style={thStyle}>📅 Date</th>
-                  <th style={thStyle}>📝 Summary</th>
-                  <th style={thStyle}>⚡ Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {days.map(d => (
-                  <tr key={d.id}>
-                    <td style={tdStyle}>
-                      <strong>{d.log_date}</strong>
-                    </td>
-                    <td style={tdStyle}>
-                      {d.summary ? (
-                        <div style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {d.summary}
-                        </div>
-                      ) : (
-                        <em style={{ color: '#666' }}>No summary</em>
-                      )}
-                    </td>
-                    <td style={tdStyle}>
-                      <button 
-                        style={viewButtonStyle} 
-                        onClick={() => setSelected(d.id)}
-                      >
-                        View Details
-                      </button>
-                      <button 
-                        style={deleteButtonStyle} 
-                        onClick={() => deleteDay(d.id)}
-                      >
-                        Delete
-                      </button>
-                    </td>
+            
+            {!loading && days.length === 0 && (
+              <div style={emptyStateStyle}>
+                <h3>No workout days found</h3>
+                <p>Get started by loading some sample data:</p>
+                <p>Run <code style={codeStyle}>npm run load-sample</code> to load sample data.</p>
+              </div>
+            )}
+            
+            {!loading && days.length > 0 && (
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>📅 Date</th>
+                    <th style={thStyle}>📝 Summary</th>
+                    <th style={thStyle}>⚡ Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-      {selected && <DayDetail id={selected} onBack={handleBack} />}
-    </div>
+                </thead>
+                <tbody>
+                  {days.map(d => (
+                    <tr key={d.id}>
+                      <td style={tdStyle}>
+                        <strong>{d.log_date}</strong>
+                      </td>
+                      <td style={tdStyle}>
+                        {d.summary ? (
+                          <div style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {d.summary}
+                          </div>
+                        ) : (
+                          <em style={{ color: '#666' }}>No summary</em>
+                        )}
+                      </td>
+                      <td style={tdStyle}>
+                        <button 
+                          style={viewButtonStyle} 
+                          onClick={() => setSelected(d.id)}
+                        >
+                          View Details
+                        </button>
+                        <button 
+                          style={deleteButtonStyle} 
+                          onClick={() => deleteDay(d.id)}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+        {selected && <DayDetail id={selected} onBack={handleBack} />}
+      </div>
+      <ChatBar />
+    </>
   );
 }

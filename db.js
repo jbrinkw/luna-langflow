@@ -6,7 +6,7 @@ const dbConfig = {
   port: process.env.DB_PORT || 5432,
   database: process.env.DB_NAME || 'workout_tracker',
   user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
+  password: process.env.DB_PASSWORD || '',
 };
 
 const pool = new Pool(dbConfig);
@@ -120,11 +120,11 @@ async function getDay(id) {
     
     const log = logResult.rows[0];
     
-    const planResult = await client.query(`
-      SELECT ps.id, e.name as exercise, ps.reps, ps.load, ps.order_num
-      FROM planned_sets ps JOIN exercises e ON ps.exercise_id = e.id
-      WHERE ps.log_id = $1 ORDER BY ps.order_num
-    `, [id]);
+      const planResult = await client.query(`
+    SELECT ps.id, e.name as exercise, ps.reps, ps.load, ps.rest, ps.order_num
+    FROM planned_sets ps JOIN exercises e ON ps.exercise_id = e.id
+    WHERE ps.log_id = $1 ORDER BY ps.order_num
+  `, [id]);
     
     const completedResult = await client.query(`
       SELECT cs.id, e.name as exercise, cs.reps_done, cs.load_done, cs.completed_at
@@ -147,9 +147,10 @@ async function addPlan(logId, item) {
   const client = await pool.connect();
   try {
     const exId = await getExerciseId(item.exercise);
+    const rest = item.rest || 60; // Default to 60 seconds if not provided
     const result = await client.query(
-      'INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-      [logId, exId, item.order_num, item.reps, item.load]
+      'INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load, rest) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+      [logId, exId, item.order_num, item.reps, item.load, rest]
     );
     return result.rows[0].id;
   } finally {
@@ -161,9 +162,10 @@ async function updatePlan(id, item) {
   const client = await pool.connect();
   try {
     const exId = await getExerciseId(item.exercise);
+    const rest = item.rest || 60; // Default to 60 seconds if not provided
     await client.query(
-      'UPDATE planned_sets SET exercise_id = $1, order_num = $2, reps = $3, load = $4 WHERE id = $5',
-      [exId, item.order_num, item.reps, item.load, id]
+      'UPDATE planned_sets SET exercise_id = $1, order_num = $2, reps = $3, load = $4, rest = $5 WHERE id = $6',
+      [exId, item.order_num, item.reps, item.load, rest, id]
     );
   } finally {
     client.release();

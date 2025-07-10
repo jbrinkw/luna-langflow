@@ -30,6 +30,7 @@ DROP TABLE IF EXISTS planned_sets CASCADE;
 DROP TABLE IF EXISTS daily_logs CASCADE;
 DROP TABLE IF EXISTS exercises CASCADE;
 DROP TABLE IF EXISTS timer CASCADE;
+DROP TABLE IF EXISTS chat_messages CASCADE;
 
 CREATE TABLE exercises (
     id SERIAL PRIMARY KEY,
@@ -48,7 +49,8 @@ CREATE TABLE planned_sets (
     exercise_id INTEGER REFERENCES exercises(id),
     order_num INTEGER NOT NULL,
     reps INTEGER NOT NULL,
-    load REAL NOT NULL
+    load REAL NOT NULL,
+    rest INTEGER DEFAULT 60
 );
 CREATE INDEX IF NOT EXISTS ix_planned_order ON planned_sets (log_id, order_num);
 
@@ -67,6 +69,14 @@ CREATE TABLE timer (
     timer_end_time TIMESTAMP NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE chat_messages (
+    id SERIAL PRIMARY KEY,
+    message_type VARCHAR(10) NOT NULL CHECK (message_type IN ('user', 'assistant')),
+    content TEXT NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_chat_timestamp ON chat_messages (timestamp DESC);
 """
 
 
@@ -123,23 +133,23 @@ def populate_comprehensive_sample_data(conn):
     
     # Day 1 (2 days ago) - Upper Body Focus
     day1_planned = [
-        ("push-ups", 1, 15, 0),
-        ("push-ups", 2, 15, 0),
-        ("push-ups", 3, 15, 0),
-        ("pull-ups", 4, 8, 0),
-        ("pull-ups", 5, 8, 0),
-        ("pull-ups", 6, 8, 0),
-        ("bench press", 7, 10, 135),
-        ("bench press", 8, 10, 135),
-        ("bench press", 9, 10, 135),
-        ("overhead press", 10, 8, 95),
-        ("overhead press", 11, 8, 95),
-        ("overhead press", 12, 8, 95),
-        ("rows", 13, 12, 115),
-        ("rows", 14, 12, 115),
-        ("rows", 15, 12, 115),
-        ("dips", 16, 12, 0),
-        ("dips", 17, 12, 0),
+        ("push-ups", 1, 15, 0, 60),
+        ("push-ups", 2, 15, 0, 60),
+        ("push-ups", 3, 15, 0, 90),
+        ("pull-ups", 4, 8, 0, 90),
+        ("pull-ups", 5, 8, 0, 90),
+        ("pull-ups", 6, 8, 0, 120),
+        ("bench press", 7, 10, 135, 120),
+        ("bench press", 8, 10, 135, 120),
+        ("bench press", 9, 10, 135, 180),
+        ("overhead press", 10, 8, 95, 90),
+        ("overhead press", 11, 8, 95, 90),
+        ("overhead press", 12, 8, 95, 120),
+        ("rows", 13, 12, 115, 90),
+        ("rows", 14, 12, 115, 90),
+        ("rows", 15, 12, 115, 120),
+        ("dips", 16, 12, 0, 60),
+        ("dips", 17, 12, 0, 60),
     ]
     
     day1_completed = [
@@ -164,24 +174,24 @@ def populate_comprehensive_sample_data(conn):
     
     # Day 2 (yesterday) - Lower Body Focus
     day2_planned = [
-        ("squats", 1, 12, 185),
-        ("squats", 2, 12, 185),
-        ("squats", 3, 12, 185),
-        ("squats", 4, 12, 185),
-        ("deadlifts", 5, 8, 225),
-        ("deadlifts", 6, 8, 225),
-        ("deadlifts", 7, 8, 225),
-        ("bodyweight squats", 8, 20, 0),
-        ("bodyweight squats", 9, 20, 0),
-        ("walking lunges", 10, 16, 0),
-        ("walking lunges", 11, 16, 0),
-        ("walking lunges", 12, 16, 0),
-        ("calf raises", 13, 15, 45),
-        ("calf raises", 14, 15, 45),
-        ("calf raises", 15, 15, 45),
-        ("plank", 16, 45, 0),
-        ("plank", 17, 45, 0),
-        ("plank", 18, 45, 0),
+        ("squats", 1, 12, 185, 180),
+        ("squats", 2, 12, 185, 180),
+        ("squats", 3, 12, 185, 180),
+        ("squats", 4, 12, 185, 240),
+        ("deadlifts", 5, 8, 225, 240),
+        ("deadlifts", 6, 8, 225, 240),
+        ("deadlifts", 7, 8, 225, 300),
+        ("bodyweight squats", 8, 20, 0, 60),
+        ("bodyweight squats", 9, 20, 0, 60),
+        ("walking lunges", 10, 16, 0, 60),
+        ("walking lunges", 11, 16, 0, 60),
+        ("walking lunges", 12, 16, 0, 90),
+        ("calf raises", 13, 15, 45, 45),
+        ("calf raises", 14, 15, 45, 45),
+        ("calf raises", 15, 15, 45, 60),
+        ("plank", 16, 45, 0, 60),
+        ("plank", 17, 45, 0, 60),
+        ("plank", 18, 45, 0, 60),
     ]
     
     day2_completed = [
@@ -207,25 +217,25 @@ def populate_comprehensive_sample_data(conn):
     
     # Day 3 (today) - Full Body/Conditioning
     day3_planned = [
-        ("burpees", 1, 10, 0),
-        ("burpees", 2, 10, 0),
-        ("burpees", 3, 10, 0),
-        ("burpees", 4, 10, 0),
-        ("push-ups", 5, 12, 0),
-        ("push-ups", 6, 12, 0),
-        ("push-ups", 7, 12, 0),
-        ("pull-ups", 8, 6, 0),
-        ("pull-ups", 9, 6, 0),
-        ("pull-ups", 10, 6, 0),
-        ("bodyweight squats", 11, 15, 0),
-        ("bodyweight squats", 12, 15, 0),
-        ("bodyweight squats", 13, 15, 0),
-        ("mountain climbers", 14, 20, 0),
-        ("mountain climbers", 15, 20, 0),
-        ("mountain climbers", 16, 20, 0),
-        ("plank", 17, 60, 0),
-        ("plank", 18, 60, 0),
-        ("plank", 19, 60, 0),
+        ("burpees", 1, 10, 0, 90),
+        ("burpees", 2, 10, 0, 90),
+        ("burpees", 3, 10, 0, 90),
+        ("burpees", 4, 10, 0, 120),
+        ("push-ups", 5, 12, 0, 60),
+        ("push-ups", 6, 12, 0, 60),
+        ("push-ups", 7, 12, 0, 90),
+        ("pull-ups", 8, 6, 0, 90),
+        ("pull-ups", 9, 6, 0, 90),
+        ("pull-ups", 10, 6, 0, 120),
+        ("bodyweight squats", 11, 15, 0, 45),
+        ("bodyweight squats", 12, 15, 0, 45),
+        ("bodyweight squats", 13, 15, 0, 60),
+        ("mountain climbers", 14, 20, 0, 30),
+        ("mountain climbers", 15, 20, 0, 30),
+        ("mountain climbers", 16, 20, 0, 60),
+        ("plank", 17, 60, 0, 60),
+        ("plank", 18, 60, 0, 60),
+        ("plank", 19, 60, 0, 60),
     ]
     
     day3_completed = [
@@ -241,11 +251,11 @@ def populate_comprehensive_sample_data(conn):
     # Insert planned sets
     all_planned = [(day1_planned, log_ids[0]), (day2_planned, log_ids[1]), (day3_planned, log_ids[2])]
     for day_data, log_id in all_planned:
-        for exercise, order_num, reps, load in day_data:
+        for exercise, order_num, reps, load, rest in day_data:
             exercise_id = exercise_ids[exercise]
             cur.execute(
-                "INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES (%s, %s, %s, %s, %s)",
-                (log_id, exercise_id, order_num, reps, load)
+                "INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load, rest) VALUES (%s, %s, %s, %s, %s, %s)",
+                (log_id, exercise_id, order_num, reps, load, rest)
             )
     
     # Insert completed sets
@@ -276,3 +286,68 @@ def get_today_log_id(conn):
     cur.execute("INSERT INTO daily_logs (id, log_date) VALUES (%s, %s)", (log_id, today))
     conn.commit()
     return log_id
+
+def save_chat_message(message_type, content):
+    """Save a chat message to the database and keep only the last 25 messages"""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        
+        # Insert the new message
+        cur.execute(
+            "INSERT INTO chat_messages (message_type, content) VALUES (%s, %s)",
+            (message_type, content)
+        )
+        
+        # Keep only the last 25 messages
+        cur.execute("""
+            DELETE FROM chat_messages 
+            WHERE id NOT IN (
+                SELECT id FROM chat_messages 
+                ORDER BY timestamp DESC 
+                LIMIT 25
+            )
+        """)
+        
+        conn.commit()
+    finally:
+        conn.close()
+
+def get_recent_chat_messages(limit=25):
+    """Get the most recent chat messages, ordered chronologically"""
+    conn = get_connection()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("""
+            SELECT message_type, content, timestamp 
+            FROM chat_messages 
+            ORDER BY timestamp ASC 
+            LIMIT %s
+        """, (limit,))
+        
+        messages = []
+        for row in cur.fetchall():
+            messages.append({
+                'type': row['message_type'],
+                'content': row['content'],
+                'timestamp': row['timestamp'].isoformat()
+            })
+        
+        return messages
+    finally:
+        conn.close()
+
+def clear_chat_memory():
+    """Clear all chat messages from the database"""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM chat_messages")
+        conn.commit()
+    finally:
+        conn.close()
+
+if __name__ == "__main__":
+    print("Resetting database with new schema...")
+    init_db(sample=False)
+    print("Database reset complete with sample data!")

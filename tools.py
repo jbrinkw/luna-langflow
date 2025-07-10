@@ -36,15 +36,18 @@ def new_daily_plan(items: List[Dict[str, Any]]):
         for item in items:
             reps = int(item["reps"])
             load = float(item["load"])
+            rest = int(item.get("rest", 60))  # Default to 60 seconds if not provided
             if not (1 <= reps <= MAX_REPS):
                 raise ValueError("reps out of range")
             if not (0 <= load <= MAX_LOAD):
                 raise ValueError("load out of range")
+            if not (0 <= rest <= 600):  # Max 10 minutes rest
+                raise ValueError("rest time out of range")
             exercise_id = _get_exercise_id(conn, item["exercise"])
             order_num = int(item["order"])
             cur.execute(
-                "INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES (%s, %s, %s, %s, %s)",
-                (log_id, exercise_id, order_num, reps, load),
+                "INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load, rest) VALUES (%s, %s, %s, %s, %s, %s)",
+                (log_id, exercise_id, order_num, reps, load, rest),
             )
         conn.commit()
     finally:
@@ -60,7 +63,7 @@ def get_today_plan() -> List[Dict[str, Any]]:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         log_id = get_today_log_id(conn)
         cur.execute(
-            "SELECT e.name as exercise, reps, load, order_num FROM planned_sets ps JOIN exercises e ON ps.exercise_id = e.id WHERE log_id = %s ORDER BY order_num",
+            "SELECT e.name as exercise, reps, load, rest, order_num FROM planned_sets ps JOIN exercises e ON ps.exercise_id = e.id WHERE log_id = %s ORDER BY order_num",
             (log_id,),
         )
         rows = [dict(row) for row in cur.fetchall()]
@@ -99,66 +102,34 @@ def complete_planned_set(exercise: Optional[str] = None, reps: Optional[int] = N
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         log_id = get_today_log_id(conn)
         
-        # Find the next planned set to complete
+        # Find the next planned set to complete (same logic as UI)
         if exercise:
-            # Complete specific exercise
+            # Complete specific exercise - find first planned set for that exercise
             cur.execute("""
-                WITH exercise_counts AS (
-                    SELECT 
-                        ps.exercise_id,
-                        COUNT(ps.id) as planned_count,
-                        COALESCE(cs_count.completed_count, 0) as completed_count
-                    FROM planned_sets ps
-                    LEFT JOIN (
-                        SELECT exercise_id, COUNT(*) as completed_count
-                        FROM completed_sets
-                        WHERE log_id = %s
-                        GROUP BY exercise_id
-                    ) cs_count ON cs_count.exercise_id = ps.exercise_id
-                    WHERE ps.log_id = %s
-                    GROUP BY ps.exercise_id, cs_count.completed_count
-                )
-                SELECT ps.id, ps.exercise_id, e.name as exercise, ps.reps, ps.load, ps.order_num
+                SELECT ps.id, ps.exercise_id, e.name as exercise, ps.reps, ps.load, ps.rest, ps.order_num
                 FROM planned_sets ps
                 JOIN exercises e ON ps.exercise_id = e.id
-                JOIN exercise_counts ec ON ec.exercise_id = ps.exercise_id
-                WHERE ps.log_id = %s AND e.name = %s AND ec.completed_count < ec.planned_count
+                WHERE ps.log_id = %s AND e.name = %s
                 ORDER BY ps.order_num
                 LIMIT 1
-            """, (log_id, log_id, log_id, exercise))
+            """, (log_id, exercise))
         else:
-            # Complete next planned set in order
+            # Complete next planned set in order (first in queue, same as UI)
             cur.execute("""
-                WITH exercise_counts AS (
-                    SELECT 
-                        ps.exercise_id,
-                        COUNT(ps.id) as planned_count,
-                        COALESCE(cs_count.completed_count, 0) as completed_count
-                    FROM planned_sets ps
-                    LEFT JOIN (
-                        SELECT exercise_id, COUNT(*) as completed_count
-                        FROM completed_sets
-                        WHERE log_id = %s
-                        GROUP BY exercise_id
-                    ) cs_count ON cs_count.exercise_id = ps.exercise_id
-                    WHERE ps.log_id = %s
-                    GROUP BY ps.exercise_id, cs_count.completed_count
-                )
-                SELECT ps.id, ps.exercise_id, e.name as exercise, ps.reps, ps.load, ps.order_num
+                SELECT ps.id, ps.exercise_id, e.name as exercise, ps.reps, ps.load, ps.rest, ps.order_num
                 FROM planned_sets ps
                 JOIN exercises e ON ps.exercise_id = e.id
-                JOIN exercise_counts ec ON ec.exercise_id = ps.exercise_id
-                WHERE ps.log_id = %s AND ec.completed_count < ec.planned_count
+                WHERE ps.log_id = %s
                 ORDER BY ps.order_num
                 LIMIT 1
-            """, (log_id, log_id, log_id))
+            """, (log_id,))
         
         planned_set = cur.fetchone()
         if not planned_set:
             if exercise:
-                return f"No incomplete planned set found for exercise: {exercise}"
+                return f"No planned sets found for exercise: {exercise}"
             else:
-                return "No incomplete planned sets found for today"
+                return "No planned sets remaining for today"
         
         # Use planned values as defaults, override if provided
         actual_reps = reps if reps is not None else planned_set['reps']
@@ -175,12 +146,40 @@ def complete_planned_set(exercise: Optional[str] = None, reps: Optional[int] = N
             "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done, completed_at) VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP - INTERVAL '4 hours')",
             (log_id, planned_set['exercise_id'], actual_reps, actual_load),
         )
+        
+        # Delete the completed planned set (same as UI behavior)
+        cur.execute(
+            "DELETE FROM planned_sets WHERE id = %s",
+            (planned_set['id'],)
+        )
+        
         conn.commit()
+        
+        # Set timer for rest period if there's a rest time
+        rest_time = planned_set.get('rest', 60)  # Default to 60 seconds
+        if rest_time > 0:
+            try:
+                import subprocess
+                import os
+                # Ensure we're in the correct directory for the timer script
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                timer_script = os.path.join(script_dir, 'timer_temp.py')
+                result = subprocess.run(['python', timer_script, 'set', str(rest_time), 'seconds'], 
+                                       capture_output=True, text=True, cwd=script_dir)
+                if result.returncode == 0:
+                    rest_info = f" Rest timer set for {rest_time} seconds."
+                else:
+                    rest_info = f" (Timer error: {result.stderr.strip()})"
+            except Exception as e:
+                rest_info = f" (Timer error: {e})"
+        else:
+            rest_info = ""
         
         # Return completion summary
         result = f"Completed {planned_set['exercise']}: {actual_reps} reps @ {actual_load} load"
         if reps is not None or load is not None:
             result += f" (planned: {planned_set['reps']} reps @ {planned_set['load']} load)"
+        result += rest_info
         return result
         
     finally:
@@ -274,69 +273,46 @@ def set_timer(minutes: int):
     if not (1 <= minutes <= 180):  # Max 3 hours
         raise ValueError("Timer duration must be between 1 and 180 minutes")
     
-    conn = get_connection()
     try:
-        cur = conn.cursor()
-        # Clear any existing timers first
-        cur.execute("DELETE FROM timer")
-        
-        # Calculate end time using corrected time
-        end_time = get_corrected_time() + timedelta(minutes=minutes)
-        
-        # Insert new timer
-        cur.execute(
-            "INSERT INTO timer (timer_end_time) VALUES (%s)",
-            (end_time,)
-        )
-        conn.commit()
-    finally:
-        conn.close()
-    
-    return f"Timer set for {minutes} minutes (until {end_time.strftime('%H:%M:%S')})"
+        import subprocess
+        import os
+        # Ensure we're in the correct directory for the timer script
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        timer_script = os.path.join(script_dir, 'timer_temp.py')
+        result = subprocess.run(['python', timer_script, 'set', str(minutes)], 
+                               capture_output=True, text=True, cwd=script_dir)
+        if result.returncode == 0:
+            return f"Timer set for {minutes} minutes"
+        else:
+            return f"Timer error: {result.stderr.strip()}"
+    except Exception as e:
+        return f"Timer error: {e}"
 
 
 @function_tool(strict_mode=False)
 def get_timer() -> Dict[str, Any]:
     """Get current timer status - shows remaining time or if timer has expired."""
-    conn = get_connection()
     try:
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute(
-            "SELECT timer_end_time, created_at FROM timer ORDER BY created_at DESC LIMIT 1"
-        )
-        row = cur.fetchone()
-        
-        if not row:
-            return {"status": "no_timer", "message": "No timer currently set"}
-        
-        end_time = row['timer_end_time']
-        created_at = row['created_at']
-        now = get_corrected_time()
-        
-        if now >= end_time:
-            # Timer has expired
-            time_expired = int((now - end_time).total_seconds())
-            return {
-                "status": "expired",
-                "message": f"Timer expired {time_expired} seconds ago",
-                "end_time": end_time.isoformat(),
-                "created_at": created_at.isoformat()
-            }
+        import subprocess
+        import os
+        import json
+        # Ensure we're in the correct directory for the timer script
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        timer_script = os.path.join(script_dir, 'timer_temp.py')
+        result = subprocess.run(['python', timer_script, 'get'], 
+                               capture_output=True, text=True, cwd=script_dir)
+        if result.returncode == 0:
+            try:
+                # Parse the JSON output from timer_temp.py
+                timer_data = json.loads(result.stdout.strip())
+                return timer_data
+            except json.JSONDecodeError:
+                # If it's not JSON, treat it as a simple message
+                return {"status": "no_timer", "message": result.stdout.strip()}
         else:
-            # Timer is still running
-            remaining_seconds = int((end_time - now).total_seconds())
-            remaining_minutes = remaining_seconds // 60
-            remaining_seconds = remaining_seconds % 60
-            
-            return {
-                "status": "running",
-                "message": f"Timer running - {remaining_minutes}:{remaining_seconds:02d} remaining",
-                "remaining_seconds": int((end_time - now).total_seconds()),
-                "end_time": end_time.isoformat(),
-                "created_at": created_at.isoformat()
-            }
-    finally:
-        conn.close()
+            return {"status": "error", "message": f"Timer error: {result.stderr.strip()}"}
+    except Exception as e:
+        return {"status": "error", "message": f"Timer error: {e}"}
 
 
 __all__ = [

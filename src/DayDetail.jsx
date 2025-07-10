@@ -4,10 +4,23 @@ export default function DayDetail({ id, onBack }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [newPlan, setNewPlan] = useState({ exercise: '', reps: 0, load: 0, order_num: 1 });
+  const [newPlan, setNewPlan] = useState({ exercise: '', reps: 0, load: 0, rest: 60, order_num: 1 });
   const [completionForm, setCompletionForm] = useState({ exercise: '', reps_done: 0, load_done: 0 });
   const [isCompleting, setIsCompleting] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [timerStatus, setTimerStatus] = useState(null);
+
+  const loadTimer = async () => {
+    try {
+      const response = await fetch('/api/timer');
+      if (response.ok) {
+        const timer = await response.json();
+        setTimerStatus(timer);
+      }
+    } catch (err) {
+      console.error('Error loading timer:', err);
+    }
+  };
 
   const load = async (showLoading = true) => {
     if (showLoading) {
@@ -58,9 +71,13 @@ export default function DayDetail({ id, onBack }) {
   useEffect(() => {
     // Initial load
     load(true);
+    loadTimer();
     
-    // Set up polling every 3 seconds
-    const interval = setInterval(() => load(false), 3000);
+    // Set up polling every 1 second for data and timer (faster timer updates)
+    const interval = setInterval(() => {
+      load(false);
+      loadTimer();
+    }, 1000);
     
     // Cleanup interval on unmount
     return () => clearInterval(interval);
@@ -72,7 +89,7 @@ export default function DayDetail({ id, onBack }) {
 
   const addPlan = async () => {
     await fetch(`/api/days/${id}/plan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newPlan) });
-    setNewPlan({ exercise: '', reps: 0, load: 0, order_num: 1 });
+    setNewPlan({ exercise: '', reps: 0, load: 0, rest: 60, order_num: 1 });
     load(false); // Don't show loading spinner for user-initiated actions
   };
 
@@ -92,8 +109,9 @@ export default function DayDetail({ id, onBack }) {
       const nextSetId = data.plan[0].id;
       await fetch(`/api/plan/${nextSetId}`, { method: 'DELETE' });
       
-      // Refresh data
+      // Refresh data and timer
       load(false);
+      loadTimer();
     } catch (err) {
       console.error('Error completing set:', err);
     } finally {
@@ -252,6 +270,12 @@ export default function DayDetail({ id, onBack }) {
     textAlign: 'center'
   };
 
+  const restInputStyle = {
+    ...inputStyle,
+    width: '50px',
+    textAlign: 'center'
+  };
+
   const buttonStyle = {
     padding: '4px 8px',
     backgroundColor: '#dc3545',
@@ -312,45 +336,83 @@ export default function DayDetail({ id, onBack }) {
       
       {/* Complete Set Section */}
       <div style={completionSectionStyle}>
-        <h3 style={{ marginTop: 0, marginBottom: '15px' }}>🎯 Complete Set</h3>
+        <h3 style={{ marginTop: 0, marginBottom: '20px', fontSize: '20px', color: '#155724' }}>Next in Queue:</h3>
         
         {nextSet ? (
           <div style={nextSetStyle}>
-            <h4 style={{ margin: '0 0 8px 0', color: '#155724' }}>Next in Queue:</h4>
-            <p style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>
-              {nextSet.exercise} - {nextSet.reps} reps @ {nextSet.load} lbs
-            </p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ marginBottom: '12px' }}>
+                  <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#155724', marginBottom: '6px' }}>
+                    {nextSet.exercise}
+                  </div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#333' }}>
+                    {nextSet.reps} reps @ {nextSet.load} lbs
+                  </div>
+                  <div style={{ fontSize: '15px', color: '#666', marginTop: '4px' }}>
+                    Rest: {nextSet.rest || 60} seconds
+                  </div>
+                </div>
+              </div>
+              {timerStatus && (
+                <div style={{ textAlign: 'right', marginLeft: '20px', fontSize: '18px', fontWeight: 'bold' }}>
+                  {timerStatus.status === 'running' && (
+                    <div style={{ color: '#007bff' }}>
+                      <div>⏱️ Timer:</div>
+                      <div style={{ fontSize: '20px', marginTop: '4px' }}>
+                        {Math.floor(timerStatus.remaining_seconds / 60)}:{(timerStatus.remaining_seconds % 60).toString().padStart(2, '0')} remaining
+                      </div>
+                    </div>
+                  )}
+                  {timerStatus.status === 'expired' && (
+                    <div style={{ color: '#dc3545' }}>
+                      <div>⏰ Timer</div>
+                      <div style={{ fontSize: '20px', marginTop: '4px' }}>
+                        expired!
+                      </div>
+                    </div>
+                  )}
+                  {timerStatus.status === 'no_timer' && (
+                    <div style={{ color: '#666' }}>
+                      No timer set
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div style={{ ...nextSetStyle, backgroundColor: '#f8f9fa', borderColor: '#6c757d' }}>
-            <p style={{ margin: 0, color: '#6c757d' }}>🎉 All sets completed!</p>
+            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#6c757d', textAlign: 'center', padding: '10px' }}>
+              🎉 All sets completed!
+            </div>
           </div>
         )}
 
         {nextSet && (
-          <form onSubmit={handleCompletionFormSubmit} style={completionFormStyle}>
+          <form onSubmit={handleCompletionFormSubmit} style={{ ...completionFormStyle, marginTop: '16px' }}>
             <div style={formGroupStyle}>
-              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Exercise</label>
+              <label style={{ fontSize: '14px', fontWeight: 'bold', color: '#333' }}>Exercise</label>
               <input
-                style={{ ...inputStyle, width: '150px' }}
+                style={{ ...inputStyle, width: '180px', padding: '8px', fontSize: '16px' }}
                 value={completionForm.exercise}
                 onChange={e => handleCompletionChange('exercise', e.target.value)}
                 placeholder="Exercise name"
               />
             </div>
             <div style={formGroupStyle}>
-              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Reps Done</label>
+              <label style={{ fontSize: '14px', fontWeight: 'bold', color: '#333' }}>Reps Done</label>
               <input
-                style={numberInputStyle}
+                style={{ ...numberInputStyle, width: '80px', padding: '8px', fontSize: '16px' }}
                 type="number"
                 value={completionForm.reps_done}
                 onChange={e => handleCompletionChange('reps_done', parseInt(e.target.value) || 0)}
               />
             </div>
             <div style={formGroupStyle}>
-              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Weight (lbs)</label>
+              <label style={{ fontSize: '14px', fontWeight: 'bold', color: '#333' }}>Weight (lbs)</label>
               <input
-                style={numberInputStyle}
+                style={{ ...numberInputStyle, width: '80px', padding: '8px', fontSize: '16px' }}
                 type="number"
                 value={completionForm.load_done}
                 onChange={e => handleCompletionChange('load_done', parseFloat(e.target.value) || 0)}
@@ -358,7 +420,7 @@ export default function DayDetail({ id, onBack }) {
             </div>
             <button
               type="submit"
-              style={completeButtonStyle}
+              style={{ ...completeButtonStyle, padding: '12px 24px', fontSize: '16px' }}
               disabled={isCompleting}
             >
               {isCompleting ? 'Completing...' : '✓ Complete Set'}
@@ -377,6 +439,7 @@ export default function DayDetail({ id, onBack }) {
                 <th style={thStyle}>Exercise</th>
                 <th style={thStyle}>Reps</th>
                 <th style={thStyle}>Load</th>
+                <th style={thStyle}>Rest</th>
                 <th style={thStyle}>Order</th>
                 <th style={thStyle}>Action</th>
               </tr>
@@ -405,6 +468,14 @@ export default function DayDetail({ id, onBack }) {
                       type="number" 
                       value={p.load} 
                       onChange={e => handlePlanChange(i,'load', e.target.value)} 
+                    />
+                  </td>
+                  <td style={tdStyle}>
+                    <input 
+                      style={restInputStyle}
+                      type="number" 
+                      value={p.rest || 60} 
+                      onChange={e => handlePlanChange(i,'rest', e.target.value)} 
                     />
                   </td>
                   <td style={tdStyle}>
@@ -448,6 +519,14 @@ export default function DayDetail({ id, onBack }) {
                     type="number" 
                     value={newPlan.load} 
                     onChange={e => setNewPlan({...newPlan, load:e.target.value})} 
+                  />
+                </td>
+                <td style={tdStyle}>
+                  <input 
+                    style={restInputStyle}
+                    type="number" 
+                    value={newPlan.rest} 
+                    onChange={e => setNewPlan({...newPlan, rest:e.target.value})} 
                   />
                 </td>
                 <td style={tdStyle}>
