@@ -141,8 +141,8 @@ def complete_planned_set(exercise: Optional[str] = None, reps: Optional[int] = N
         
         # Record the completion
         cur.execute(
-            "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done, completed_at) VALUES (%s, %s, %s, %s, %s)",
-            (log_id, planned_set['exercise_id'], actual_reps, actual_load, datetime.now(timezone.utc)),
+            "INSERT INTO completed_sets (log_id, exercise_id, planned_set_id, reps_done, load_done, completed_at) VALUES (%s, %s, %s, %s, %s, %s)",
+            (log_id, planned_set['exercise_id'], planned_set['id'], actual_reps, actual_load, datetime.now(timezone.utc)),
         )
         
         # Delete the completed planned set (same as UI behavior)
@@ -211,7 +211,7 @@ def get_recent_history(days: int) -> List[Dict[str, Any]]:
             FROM planned_sets ps
             JOIN daily_logs dl ON ps.log_id = dl.id
             JOIN exercises e ON ps.exercise_id = e.id
-            LEFT JOIN completed_sets cs ON cs.log_id = ps.log_id AND cs.exercise_id = ps.exercise_id
+            LEFT JOIN completed_sets cs ON cs.planned_set_id = ps.id
             WHERE dl.log_date >= %s
             ORDER BY dl.log_date, ps.order_num
             """,

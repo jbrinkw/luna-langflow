@@ -58,6 +58,7 @@ CREATE TABLE completed_sets (
     id SERIAL PRIMARY KEY,
     log_id TEXT REFERENCES daily_logs(id) ON DELETE CASCADE,
     exercise_id INTEGER REFERENCES exercises(id),
+    planned_set_id INTEGER REFERENCES planned_sets(id),
     reps_done INTEGER,
     load_done REAL,
     completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -248,24 +249,38 @@ def populate_comprehensive_sample_data(conn):
         ("plank", 60, 0),
     ]
     
-    # Insert planned sets
+    # Insert planned sets and keep mapping of inserted IDs by exercise
     all_planned = [(day1_planned, log_ids[0]), (day2_planned, log_ids[1]), (day3_planned, log_ids[2])]
+    planned_map = {}
     for day_data, log_id in all_planned:
+        planned_map[log_id] = {}
         for exercise, order_num, reps, load, rest in day_data:
             exercise_id = exercise_ids[exercise]
             cur.execute(
-                "INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load, rest) VALUES (%s, %s, %s, %s, %s, %s)",
+                "INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load, rest) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
                 (log_id, exercise_id, order_num, reps, load, rest)
             )
+            ps_id = cur.fetchone()[0]
+            planned_map[log_id].setdefault(exercise, []).append(ps_id)
     
     # Insert completed sets
     all_completed = [(day1_completed, log_ids[0]), (day2_completed, log_ids[1]), (day3_completed, log_ids[2])]
     for day_data, log_id in all_completed:
         for exercise, reps, load in day_data:
             exercise_id = exercise_ids[exercise]
+<<<<<<< HEAD
             cur.execute(
                 "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done, completed_at) VALUES (%s, %s, %s, %s, %s)",
                 (log_id, exercise_id, reps, load, datetime.now(timezone.utc))
+=======
+            ps_id = None
+            if planned_map.get(log_id) and planned_map[log_id].get(exercise):
+                ps_id = planned_map[log_id][exercise].pop(0)
+            # Use database default timestamp with timezone correction for sample data
+            cur.execute(
+                "INSERT INTO completed_sets (log_id, exercise_id, planned_set_id, reps_done, load_done, completed_at) VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP - INTERVAL '4 hours')",
+                (log_id, exercise_id, ps_id, reps, load)
+>>>>>>> origin/codex/update-completed_sets-schema-and-related-functions
             )
 
 
@@ -346,7 +361,28 @@ def clear_chat_memory():
     finally:
         conn.close()
 
+def apply_migrations():
+    """Apply incremental schema changes."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        # Add planned_set_id column to completed_sets if it does not exist
+        cur.execute(
+            """
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='completed_sets' AND column_name='planned_set_id'
+            """
+        )
+        if not cur.fetchone():
+            cur.execute(
+                "ALTER TABLE completed_sets ADD COLUMN planned_set_id INTEGER REFERENCES planned_sets(id)"
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
 if __name__ == "__main__":
     print("Resetting database with new schema...")
     init_db(sample=False)
+    apply_migrations()
     print("Database reset complete with sample data!")
