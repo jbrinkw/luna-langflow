@@ -16,7 +16,7 @@ def run_sql_direct(query: str):
         conn.close()
 
 
-def test_with_agent(agent, prompt, test_name):
+def run_with_agent(agent, prompt, test_name):
     """Run a test with the agent and return results"""
     print(f"\n{'='*60}")
     print(f"TEST: {test_name}")
@@ -55,49 +55,49 @@ def run_comprehensive_tests():
     print("="*80)
     
     # A1: Create Daily Plan
-    test_with_agent(
+    run_with_agent(
         agent,
         "Create a new workout plan for tomorrow with these exercises: push-ups 3 sets of 12 reps, pull-ups 2 sets of 8 reps, and squats 3 sets of 15 reps at 100 pounds. Use the new_daily_plan tool.",
         "A1: Create Daily Plan"
     )
     
     # A2: Retrieve Today's Plan
-    test_with_agent(
+    run_with_agent(
         agent,
         "Show me today's workout plan using get_today_plan. I want to see what exercises are scheduled.",
         "A2: Retrieve Today's Plan"
     )
     
     # A3: Log Completed Set
-    test_with_agent(
+    run_with_agent(
         agent,
         "I just finished a set of push-ups - 15 reps at bodyweight. Log this completed set using log_completed_set.",
         "A3: Log Completed Set"
     )
     
     # A4: Update Daily Summary
-    test_with_agent(
+    run_with_agent(
         agent,
         "Update today's workout summary using update_summary. Write: 'Great conditioning session, felt strong on all exercises.'",
         "A4: Update Daily Summary"
     )
     
     # A5: Get Recent History
-    test_with_agent(
+    run_with_agent(
         agent,
         "Show me my workout history for the last 3 days using get_recent_history. I want to see my progress.",
         "A5: Get Recent History"
     )
     
     # A6: Run SQL Query
-    test_with_agent(
+    run_with_agent(
         agent,
         "Run a SQL query using run_sql to show me all the exercises in the database. Query: SELECT * FROM exercises",
         "A6: Run SQL Query"
     )
     
     # A7: Update Data
-    test_with_agent(
+    run_with_agent(
         agent,
         "Use arbitrary_update to change the weight on my first squat set to 200 pounds. Update planned_sets table where order_num=1 and exercise is squats.",
         "A7: Update Data"
@@ -112,28 +112,28 @@ def run_comprehensive_tests():
     print("="*80)
     
     # C1: Natural Language Understanding
-    test_with_agent(
+    run_with_agent(
         agent,
         "I did some pushups and pullups this morning, maybe like 20 pushups and 10 pullups, can you log that for me?",
         "C1: Natural Language Understanding"
     )
     
     # C2: Contextual Responses
-    result = test_with_agent(
+    result = run_with_agent(
         agent,
         "What's my strongest exercise based on my recent workouts?",
         "C2: Contextual Responses (Part 1)"
     )
     
     # Follow-up question with explicit context
-    test_with_agent(
+    run_with_agent(
         agent,
         "How can I improve my deadlift further? You mentioned that deadlifts are my strongest exercise based on recent workouts.",
         "C2: Contextual Responses (Part 2)"
     )
     
     # C3: Timestamp Integration
-    test_with_agent(
+    run_with_agent(
         agent,
         "Can you see the timestamp at the beginning of this message? Please acknowledge if you can see when I sent this message.",
         "C3: Timestamp Integration"

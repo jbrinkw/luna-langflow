@@ -1,7 +1,7 @@
 {
   "name": "luna-langflow",
   "version": "1.0.0",
-  "description": "This demo shows a simple LangChain agent connected to a SQLite database for tracking workouts. Tools mirror the planned production API.",
+  "description": "This demo shows a simple LangChain agent connected to a PostgreSQL database for tracking workouts. Tools mirror the planned production API.",
   "main": "server.js",
   "scripts": {
     "dev": "vite",

@@ -1,3 +1,5 @@
+"""Database helper functions for PostgreSQL backend."""
+
 import os
 import psycopg2
 import psycopg2.extras
@@ -268,19 +270,12 @@ def populate_comprehensive_sample_data(conn):
     for day_data, log_id in all_completed:
         for exercise, reps, load in day_data:
             exercise_id = exercise_ids[exercise]
-<<<<<<< HEAD
-            cur.execute(
-                "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done, completed_at) VALUES (%s, %s, %s, %s, %s)",
-                (log_id, exercise_id, reps, load, datetime.now(timezone.utc))
-=======
             ps_id = None
             if planned_map.get(log_id) and planned_map[log_id].get(exercise):
                 ps_id = planned_map[log_id][exercise].pop(0)
-            # Use database default timestamp with timezone correction for sample data
             cur.execute(
-                "INSERT INTO completed_sets (log_id, exercise_id, planned_set_id, reps_done, load_done, completed_at) VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP - INTERVAL '4 hours')",
+                "INSERT INTO completed_sets (log_id, exercise_id, planned_set_id, reps_done, load_done, completed_at) VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)",
                 (log_id, exercise_id, ps_id, reps, load)
->>>>>>> origin/codex/update-completed_sets-schema-and-related-functions
             )
 
 

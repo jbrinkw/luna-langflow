@@ -192,56 +192,7 @@ app.post('/api/chat', async (req, res) => {
 
     // Call Python agent with the temp file
     const { spawn } = require('child_process');
-    const pythonProcess = spawn('python', ['-c', `
-import sys
-import json
-import os
-sys.path.append('.')
-from agent import create_agent, run_agent
-from db import save_chat_message, get_recent_chat_messages
-
-# Read message from temp file
-temp_file = "${tempFile.replace(/\\/g, '\\\\')}"
-with open(temp_file, 'r', encoding='utf-8') as f:
-    chat_data = json.load(f)
-
-message = chat_data['message']
-
-# Get recent chat history
-recent_messages = get_recent_chat_messages(25)
-
-# Build context with chat history
-context = ""
-if recent_messages:
-    context += "Previous conversation context:\\n"
-    for msg in recent_messages:
-        role = "User" if msg['type'] == 'user' else "Assistant"
-        context += f"{role}: {msg['content']}\\n"
-    context += "\\n"
-
-# Current message with context
-message_with_context = context + "Current user message: " + message
-
-# Save user message to database
-save_chat_message('user', message)
-
-# Run agent with context
-agent = create_agent()
-result = run_agent(agent, message_with_context)
-
-# Extract and save assistant response
-if hasattr(result, 'final_output') and result.final_output:
-    assistant_response = result.final_output
-    save_chat_message('assistant', assistant_response)
-    print(assistant_response)
-else:
-    error_msg = "Error: Could not extract final output"
-    save_chat_message('assistant', error_msg)
-    print(error_msg)
-
-# Clean up temp file
-os.remove(temp_file)
-`]);
+    const pythonProcess = spawn('python', ['chat_agent.py', tempFile]);
 
     let responseData = '';
     let errorData = '';

@@ -1,5 +1,4 @@
 import db
-import sqlite3
 from db import get_connection
 import tools
 from agent import create_agent
@@ -12,8 +11,11 @@ def reset_db():
 def query(sql: str, params: tuple | None = None):
     conn = get_connection()
     try:
-        cur = conn.execute(sql, params or ())
-        return [dict(row) for row in cur.fetchall()]
+        cur = conn.cursor()
+        cur.execute(sql, params or ())
+        columns = [desc[0] for desc in cur.description]
+        rows = [dict(zip(columns, r)) for r in cur.fetchall()]
+        return rows
     finally:
         conn.close()
 

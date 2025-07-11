@@ -36,6 +36,7 @@ async function initDb(sample = false) {
         id SERIAL PRIMARY KEY,
         log_id VARCHAR(255) REFERENCES daily_logs(id) ON DELETE CASCADE,
         exercise_id INTEGER REFERENCES exercises(id),
+        planned_set_id INTEGER REFERENCES planned_sets(id),
         reps_done INTEGER,
         load_done REAL,
         completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -127,7 +128,7 @@ async function getDay(id) {
   `, [id]);
     
     const completedResult = await client.query(`
-      SELECT cs.id, e.name as exercise, cs.reps_done, cs.load_done, cs.completed_at
+      SELECT cs.id, e.name as exercise, cs.planned_set_id, cs.reps_done, cs.load_done, cs.completed_at
       FROM completed_sets cs JOIN exercises e ON cs.exercise_id = e.id
       WHERE cs.log_id = $1
       ORDER BY cs.completed_at DESC NULLS LAST
@@ -185,11 +186,9 @@ async function addCompleted(logId, item) {
   const client = await pool.connect();
   try {
     const exId = await getExerciseId(item.exercise);
-    
-    // Database server clock is 4 hours fast, so subtract 4 hours from CURRENT_TIMESTAMP
     const result = await client.query(
-      'INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done, completed_at) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP - INTERVAL \'4 hours\') RETURNING id',
-      [logId, exId, item.reps_done, item.load_done]
+      'INSERT INTO completed_sets (log_id, exercise_id, planned_set_id, reps_done, load_done, completed_at) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP) RETURNING id',
+      [logId, exId, item.planned_set_id || null, item.reps_done, item.load_done]
     );
     return result.rows[0].id;
   } finally {
@@ -202,8 +201,8 @@ async function updateCompleted(id, item) {
   try {
     const exId = await getExerciseId(item.exercise);
     await client.query(
-      'UPDATE completed_sets SET exercise_id = $1, reps_done = $2, load_done = $3 WHERE id = $4',
-      [exId, item.reps_done, item.load_done, id]
+      'UPDATE completed_sets SET exercise_id = $1, planned_set_id = $2, reps_done = $3, load_done = $4 WHERE id = $5',
+      [exId, item.planned_set_id || null, item.reps_done, item.load_done, id]
     );
   } finally {
     client.release();

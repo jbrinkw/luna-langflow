@@ -1,6 +1,6 @@
 # CoachByte Agent Demo
 
-This demo shows a simple agent built with the OpenAI Agents SDK connected to a SQLite database for tracking workouts. Tools mirror the planned production API.
+This demo shows a simple agent built with the OpenAI Agents SDK connected to a PostgreSQL database for tracking workouts. Tools mirror the planned production API.
 
 ## Setup
 1. Install requirements:
