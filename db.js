@@ -227,6 +227,44 @@ async function updateSummary(id, summary) {
   }
 }
 
+async function getPRs() {
+  const client = await pool.connect();
+  try {
+    // Hardcoded tracked exercises for now (match database capitalization)
+    const trackedExercises = ['Bench Press', 'Squat', 'Deadlift'];
+    
+    const result = await client.query(`
+      SELECT 
+        e.name as exercise,
+        cs.reps_done,
+        MAX(cs.load_done) as max_load
+      FROM completed_sets cs
+      JOIN exercises e ON cs.exercise_id = e.id
+      WHERE e.name = ANY($1)
+        AND cs.reps_done > 0
+        AND cs.load_done > 0
+      GROUP BY e.name, cs.reps_done
+      ORDER BY e.name, cs.reps_done
+    `, [trackedExercises]);
+    
+    // Group by exercise
+    const prsByExercise = {};
+    for (const row of result.rows) {
+      if (!prsByExercise[row.exercise]) {
+        prsByExercise[row.exercise] = [];
+      }
+      prsByExercise[row.exercise].push({
+        reps: row.reps_done,
+        maxLoad: row.max_load
+      });
+    }
+    
+    return prsByExercise;
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   initDb,
   ensureDay,
@@ -240,4 +278,5 @@ module.exports = {
   deleteCompleted,
   updateSummary,
   deleteDay,
+  getPRs,
 };

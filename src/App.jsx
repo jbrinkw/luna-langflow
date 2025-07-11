@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import DayDetail from './DayDetail';
 import ChatBar from './ChatBar';
-import ChatSidebar from './ChatSidebar';
-import Sidebar from './Sidebar';
+import PRTracker from './PRTracker';
 
 export default function App() {
   const [days, setDays] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [showPRTracker, setShowPRTracker] = useState(false);
 
   const loadDays = async () => {
     try {
@@ -58,7 +58,13 @@ export default function App() {
 
   const handleBack = () => {
     setSelected(null);
+    setShowPRTracker(false);
     refreshDays(); // Refresh the list when going back
+  };
+
+  const handlePRTracker = () => {
+    setShowPRTracker(true);
+    setSelected(null);
   };
 
   // Styles
@@ -150,20 +156,34 @@ export default function App() {
     fontFamily: 'monospace'
   };
 
+  const prButtonStyle = {
+    padding: '8px 16px',
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 'bold'
+  };
+
   return (
     <>
-      <ChatSidebar />
-      <Sidebar />
       <div style={containerStyle}>
-        {!selected && (
+        {!selected && !showPRTracker && (
           <div>
             <div style={headerStyle}>
-              <h1 style={titleStyle}>🏋️ Workout Tracker</h1>
-              {lastUpdated && (
-                <div style={{ fontSize: '12px', color: '#666' }}>
-                  Last updated: {lastUpdated.toLocaleTimeString()}
-                </div>
-              )}
+              <div>
+                <h1 style={titleStyle}>🏋️ Workout Tracker</h1>
+                {lastUpdated && (
+                  <div style={{ fontSize: '12px', color: '#666' }}>
+                    Last updated: {lastUpdated.toLocaleTimeString()}
+                  </div>
+                )}
+              </div>
+              <button style={prButtonStyle} onClick={handlePRTracker}>
+                💪 View PRs
+              </button>
             </div>
             
             {loading && (
@@ -225,7 +245,8 @@ export default function App() {
             )}
           </div>
         )}
-        {selected && <DayDetail id={selected} onBack={handleBack} />}
+        {selected && !showPRTracker && <DayDetail id={selected} onBack={handleBack} />}
+        {showPRTracker && <PRTracker onBack={handleBack} />}
       </div>
       <ChatBar />
     </>

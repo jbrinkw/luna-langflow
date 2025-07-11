@@ -166,6 +166,17 @@ app.put('/api/days/:id/summary', async (req, res) => {
   }
 });
 
+// PR tracking endpoint
+app.get('/api/prs', async (req, res) => {
+  try {
+    const prs = await db.getPRs();
+    res.json(prs);
+  } catch (error) {
+    console.error('Error getting PRs:', error);
+    res.status(500).json({ error: 'Failed to get PRs' });
+  }
+});
+
 // Chat endpoint - connects to Python agent
 app.post('/api/chat', async (req, res) => {
   try {
