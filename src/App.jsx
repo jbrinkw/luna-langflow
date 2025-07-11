@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import DayDetail from './DayDetail';
 import ChatBar from './ChatBar';
+import ChatSidebar from './ChatSidebar';
 
 export default function App() {
   const [days, setDays] = useState([]);
@@ -150,6 +151,7 @@ export default function App() {
 
   return (
     <>
+      <ChatSidebar />
       <div style={containerStyle}>
         {!selected && (
           <div>
