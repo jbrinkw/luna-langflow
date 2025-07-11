@@ -2,7 +2,7 @@ import os
 import psycopg2
 import psycopg2.extras
 import uuid
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 
 # Database configuration
 DB_HOST = os.environ.get("DB_HOST", "192.168.1.93")
@@ -263,10 +263,9 @@ def populate_comprehensive_sample_data(conn):
     for day_data, log_id in all_completed:
         for exercise, reps, load in day_data:
             exercise_id = exercise_ids[exercise]
-            # Use database default timestamp with timezone correction for sample data
             cur.execute(
-                "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done, completed_at) VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP - INTERVAL '4 hours')",
-                (log_id, exercise_id, reps, load)
+                "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done, completed_at) VALUES (%s, %s, %s, %s, %s)",
+                (log_id, exercise_id, reps, load, datetime.now(timezone.utc))
             )
 
 

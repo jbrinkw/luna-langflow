@@ -1,6 +1,6 @@
 import os
 from typing import List
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 
 from agents import Agent, Runner
 
@@ -11,13 +11,11 @@ import tools
 MODEL = os.environ.get("OPENAI_MODEL", "o4-mini")
 
 def get_corrected_time():
-    """Get current time corrected for server clock being 4 hours fast"""
-    server_time = datetime.now()
-    corrected_time = server_time - timedelta(hours=4)
-    return corrected_time
+    """Get the current UTC time"""
+    return datetime.now(timezone.utc)
 
 def get_timestamp():
-    """Get current timestamp in readable format"""
+    """Get current UTC timestamp in readable format"""
     return get_corrected_time().strftime("[%Y-%m-%d %H:%M:%S]")
 
 def create_agent() -> Agent:
