@@ -1,15 +1,13 @@
 from typing import List, Dict, Any, Optional
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta, datetime, timezone
 import psycopg2.extras
 
 from db import get_connection, get_today_log_id
 from agents import function_tool
 
 def get_corrected_time():
-    """Get current time corrected for server clock being 4 hours fast"""
-    server_time = datetime.now()
-    corrected_time = server_time - timedelta(hours=4)
-    return corrected_time
+    """Get the current UTC time"""
+    return datetime.now(timezone.utc)
 
 # Helper validation
 MAX_LOAD = 2000
@@ -85,8 +83,8 @@ def log_completed_set(exercise: str, reps: int, load: float):
         log_id = get_today_log_id(conn)
         exercise_id = _get_exercise_id(conn, exercise)
         cur.execute(
-            "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done, completed_at) VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP - INTERVAL '4 hours')",
-            (log_id, exercise_id, reps, load),
+            "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done, completed_at) VALUES (%s, %s, %s, %s, %s)",
+            (log_id, exercise_id, reps, load, datetime.now(timezone.utc)),
         )
         conn.commit()
     finally:
@@ -143,8 +141,8 @@ def complete_planned_set(exercise: Optional[str] = None, reps: Optional[int] = N
         
         # Record the completion
         cur.execute(
-            "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done, completed_at) VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP - INTERVAL '4 hours')",
-            (log_id, planned_set['exercise_id'], actual_reps, actual_load),
+            "INSERT INTO completed_sets (log_id, exercise_id, reps_done, load_done, completed_at) VALUES (%s, %s, %s, %s, %s)",
+            (log_id, planned_set['exercise_id'], actual_reps, actual_load, datetime.now(timezone.utc)),
         )
         
         # Delete the completed planned set (same as UI behavior)
