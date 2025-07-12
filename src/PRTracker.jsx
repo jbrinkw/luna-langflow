@@ -5,13 +5,34 @@ export default function PRTracker({ onBack }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const computeEstimated1RM = (reps, load) => Math.round(load * (1 + reps / 30));
+
+  const processPRs = (data) => {
+    const processed = {};
+    for (const [exercise, prList] of Object.entries(data)) {
+      const sorted = [...prList].sort((a, b) => a.reps - b.reps);
+      const hasOneRM = sorted.some(pr => pr.reps === 1);
+      if (!hasOneRM && sorted.length > 0) {
+        const next = sorted[0];
+        const estimated = computeEstimated1RM(next.reps, next.maxLoad);
+        processed[exercise] = [
+          { reps: 1, maxLoad: estimated, estimated: true },
+          ...sorted
+        ];
+      } else {
+        processed[exercise] = sorted;
+      }
+    }
+    return processed;
+  };
+
   const loadPRs = async () => {
     try {
       setLoading(true);
       const response = await fetch('/api/prs');
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
-      setPRs(data);
+      setPRs(processPRs(data));
       setError(null);
     } catch (err) {
       console.error('Error loading PRs:', err);
@@ -168,7 +189,7 @@ export default function PRTracker({ onBack }) {
                 <div style={prListStyle}>
                   {prs[exercise].map((pr, index) => (
                     <div key={index} style={prItemStyle}>
-                      {pr.reps} rep{pr.reps !== 1 ? 's' : ''}: {pr.maxLoad} lbs
+                      {pr.reps} rep{pr.reps !== 1 ? 's' : ''}: {pr.maxLoad} lbs{pr.estimated ? ' (estimated)' : ''}
                     </div>
                   ))}
                 </div>
