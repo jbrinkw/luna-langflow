@@ -41,6 +41,10 @@ CREATE TABLE tracked_prs (
     PRIMARY KEY (exercise, reps)
 );
 
+CREATE TABLE tracked_exercises (
+    exercise VARCHAR(255) PRIMARY KEY
+);
+
 CREATE TABLE exercises (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) UNIQUE NOT NULL
@@ -97,6 +101,13 @@ def init_db(sample: bool = False):
         cur = conn.cursor()
         # Execute schema (drops and recreates tables)
         cur.execute(SCHEMA)
+        
+        # Initialize with default tracked exercises
+        cur.execute("""
+            INSERT INTO tracked_exercises (exercise) VALUES 
+            ('Bench Press'), ('Squat'), ('Deadlift')
+        """)
+        
         if sample:
             populate_comprehensive_sample_data(conn)
         conn.commit()
@@ -380,6 +391,69 @@ def apply_migrations():
                 "ALTER TABLE completed_sets ADD COLUMN planned_set_id INTEGER REFERENCES planned_sets(id)"
             )
         conn.commit()
+    finally:
+        conn.close()
+
+def get_tracked_exercises():
+    """Get all tracked exercises from the database"""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT exercise FROM tracked_exercises ORDER BY exercise")
+        return [row[0] for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+def add_tracked_exercise(exercise_name):
+    """Add a new tracked exercise"""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO tracked_exercises (exercise) VALUES (%s)", (exercise_name,))
+        conn.commit()
+    finally:
+        conn.close()
+
+def remove_tracked_exercise(exercise_name):
+    """Remove a tracked exercise"""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM tracked_exercises WHERE exercise = %s", (exercise_name,))
+        conn.commit()
+    finally:
+        conn.close()
+
+def get_current_prs():
+    """Get current PRs for all tracked exercises"""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        
+        # Get all tracked exercises
+        tracked_exercises = get_tracked_exercises()
+        
+        if not tracked_exercises:
+            return []
+        
+        # Build query for all tracked exercises
+        placeholders = ','.join(['%s'] * len(tracked_exercises))
+        
+        cur.execute(f"""
+            SELECT 
+                e.name as exercise,
+                cs.reps_done as reps,
+                MAX(cs.load_done) as max_load
+            FROM completed_sets cs
+            JOIN exercises e ON cs.exercise_id = e.id
+            WHERE e.name IN ({placeholders})
+            AND cs.reps_done IS NOT NULL 
+            AND cs.load_done IS NOT NULL
+            GROUP BY e.name, cs.reps_done
+            ORDER BY e.name, cs.reps_done
+        """, tracked_exercises)
+        
+        return [{'exercise': row[0], 'reps': row[1], 'max_load': row[2]} for row in cur.fetchall()]
     finally:
         conn.close()
 

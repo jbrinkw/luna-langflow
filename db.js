@@ -47,16 +47,22 @@ async function initDb(sample = false) {
         max_load REAL NOT NULL,
         PRIMARY KEY (exercise, reps)
       );
-    `);
-
-    if (sample) {
-      const today = new Date().toISOString().slice(0,10);
-      const logId = await ensureDay(today);
-      const exId = await getExerciseId('bench press');
-      await client.query(
-        'INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING',
-        [logId, exId, 1, 10, 100]
+      CREATE TABLE IF NOT EXISTS tracked_exercises (
+        exercise VARCHAR(255) PRIMARY KEY
       );
+    `);
+    
+    // Initialize with default tracked exercises if none exist
+    const result = await client.query('SELECT COUNT(*) FROM tracked_exercises');
+    if (parseInt(result.rows[0].count) === 0) {
+      await client.query(`
+        INSERT INTO tracked_exercises (exercise) VALUES 
+        ('Bench Press'), ('Squat'), ('Deadlift')
+      `);
+    }
+    
+    if (sample) {
+      await populateSample(client);
     }
   } finally {
     client.release();
@@ -236,8 +242,13 @@ async function updateSummary(id, summary) {
 async function getPRs() {
   const client = await pool.connect();
   try {
-    // Hardcoded tracked exercises for now (match database capitalization)
-    const trackedExercises = ['Bench Press', 'Squat', 'Deadlift'];
+    // Get tracked exercises from database instead of hardcoded list
+    const trackedResult = await client.query('SELECT exercise FROM tracked_exercises');
+    const trackedExercises = trackedResult.rows.map(row => row.exercise);
+    
+    if (trackedExercises.length === 0) {
+      return {}; // No exercises being tracked
+    }
     
     const result = await client.query(`
       SELECT 
@@ -320,6 +331,47 @@ async function deleteTrackedPR(exercise, reps) {
   }
 }
 
+async function getTrackedExercises() {
+  const client = await pool.connect();
+  try {
+    const result = await client.query('SELECT exercise FROM tracked_exercises ORDER BY exercise');
+    return result.rows.map(row => row.exercise);
+  } finally {
+    client.release();
+  }
+}
+
+async function addTrackedExercise(exercise) {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      'INSERT INTO tracked_exercises (exercise) VALUES ($1) ON CONFLICT (exercise) DO NOTHING',
+      [exercise]
+    );
+  } finally {
+    client.release();
+  }
+}
+
+async function removeTrackedExercise(exercise) {
+  const client = await pool.connect();
+  try {
+    await client.query('DELETE FROM tracked_exercises WHERE exercise = $1', [exercise]);
+  } finally {
+    client.release();
+  }
+}
+
+async function populateSample(client) {
+  const today = new Date().toISOString().slice(0,10);
+  const logId = await ensureDay(today);
+  const exId = await getExerciseId('bench press');
+  await client.query(
+    'INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING',
+    [logId, exId, 1, 10, 100]
+  );
+}
+
 module.exports = {
   initDb,
   ensureDay,
@@ -337,4 +389,7 @@ module.exports = {
   getTrackedPRs,
   upsertTrackedPR,
   deleteTrackedPR,
+  getTrackedExercises,
+  addTrackedExercise,
+  removeTrackedExercise,
 };

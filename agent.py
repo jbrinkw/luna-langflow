@@ -40,42 +40,44 @@ def get_recent_daily_summaries():
         return []
 
 def get_current_prs():
-    """Get current tracked PRs"""
+    """Return current tracked personal-record data for tracked exercises."""
     try:
         conn = get_connection()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Get tracked exercises from database instead of hardcoded list
+        cur.execute("SELECT exercise FROM tracked_exercises ORDER BY exercise")
+        tracked_rows = cur.fetchall()
+        tracked_exercises = [row['exercise'] for row in tracked_rows]
         
-        # Hardcoded tracked exercises (matching db.js)
-        tracked_exercises = ['Bench Press', 'Squat', 'Deadlift']
-        
-        cur.execute("""
-            SELECT 
-                e.name as exercise,
-                cs.reps_done,
-                MAX(cs.load_done) as max_load
+        if not tracked_exercises:
+            return {}  # No exercises being tracked
+
+        cur.execute(
+            """
+            SELECT e.name AS exercise,
+                   cs.reps_done,
+                   MAX(cs.load_done) AS max_load
             FROM completed_sets cs
             JOIN exercises e ON cs.exercise_id = e.id
             WHERE e.name = ANY(%s)
-                AND cs.reps_done > 0
-                AND cs.load_done > 0
+              AND cs.reps_done > 0
+              AND cs.load_done > 0
             GROUP BY e.name, cs.reps_done
             ORDER BY e.name, cs.reps_done
-        """, (tracked_exercises,))
-        
-        pr_data = cur.fetchall()
+            """,
+            (tracked_exercises,),
+        )
+
+        rows = cur.fetchall()
         conn.close()
-        
-        # Group by exercise
-        prs_by_exercise = {}
-        for row in pr_data:
-            if row['exercise'] not in prs_by_exercise:
-                prs_by_exercise[row['exercise']] = []
-            prs_by_exercise[row['exercise']].append({
-                'reps': row['reps_done'],
-                'maxLoad': row['max_load']
-            })
-        
-        return prs_by_exercise
+
+        prs: dict[str, list[dict]] = {}
+        for row in rows:
+            prs.setdefault(row["exercise"], []).append(
+                {"reps": row["reps_done"], "maxLoad": row["max_load"]}
+            )
+        return prs
     except Exception as e:
         print(f"Error fetching PRs: {e}")
         return {}

@@ -210,6 +210,39 @@ app.delete('/api/tracked-prs', async (req, res) => {
   }
 });
 
+// CRUD endpoints for tracked exercises (exercise names only)
+app.get('/api/tracked-exercises', async (req, res) => {
+  try {
+    const exercises = await db.getTrackedExercises();
+    res.json(exercises);
+  } catch (error) {
+    console.error('Error getting tracked exercises:', error);
+    res.status(500).json({ error: 'Failed to get tracked exercises' });
+  }
+});
+
+app.post('/api/tracked-exercises', async (req, res) => {
+  try {
+    const { exercise } = req.body;
+    await db.addTrackedExercise(exercise);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error adding tracked exercise:', error);
+    res.status(500).json({ error: 'Failed to add tracked exercise' });
+  }
+});
+
+app.delete('/api/tracked-exercises', async (req, res) => {
+  try {
+    const { exercise } = req.body;
+    await db.removeTrackedExercise(exercise);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error removing tracked exercise:', error);
+    res.status(500).json({ error: 'Failed to remove tracked exercise' });
+  }
+});
+
 // Chat endpoint - connects to Python agent
 app.post('/api/chat', async (req, res) => {
   try {
