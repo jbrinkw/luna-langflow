@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 export default function PRTracker({ onBack }) {
   const [prs, setPRs] = useState({});
+  const [tracked, setTracked] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -42,9 +43,54 @@ export default function PRTracker({ onBack }) {
     }
   };
 
+  const loadTracked = async () => {
+    try {
+      const response = await fetch('/api/tracked-prs');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      setTracked(data);
+    } catch (err) {
+      console.error('Error loading tracked PRs:', err);
+    }
+  };
+
   useEffect(() => {
     loadPRs();
+    loadTracked();
   }, []);
+
+  const saveTracked = async (exercise, reps, maxLoad) => {
+    await fetch('/api/tracked-prs', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ exercise, reps, maxLoad })
+    });
+    loadTracked();
+  };
+
+  const deleteTracked = async (exercise, reps) => {
+    await fetch('/api/tracked-prs', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ exercise, reps })
+    });
+    loadTracked();
+  };
+
+  const [newExercise, setNewExercise] = useState('');
+  const [newReps, setNewReps] = useState('');
+  const [newLoad, setNewLoad] = useState('');
+
+  const handleAdd = async () => {
+    if (!newExercise || !newReps || !newLoad) return;
+    await saveTracked(newExercise, parseInt(newReps, 10), parseFloat(newLoad));
+    setNewExercise('');
+    setNewReps('');
+    setNewLoad('');
+  };
+
+  const [editing, setEditing] = useState(null); // {exercise, reps}
+  const [editLoad, setEditLoad] = useState('');
 
   // Styles
   const containerStyle = {
@@ -137,6 +183,67 @@ export default function PRTracker({ onBack }) {
     fontSize: '14px'
   };
 
+  const TrackedPRSection = () => {
+    const names = Object.keys(tracked);
+    return (
+      <div>
+        <h2 style={{ marginBottom: '10px' }}>Tracked PRs</h2>
+        {names.length === 0 && (
+          <div style={noDataStyle}>No tracked PRs</div>
+        )}
+        {names.map(ex => (
+          <div key={ex} style={exerciseCardStyle}>
+            <h3 style={exerciseNameStyle}>{ex}</h3>
+            {tracked[ex].map(pr => (
+              editing && editing.exercise === ex && editing.reps === pr.reps ? (
+                <div key={pr.reps} style={{ marginBottom: '8px' }}>
+                  <input
+                    type="number"
+                    value={editLoad}
+                    onChange={e => setEditLoad(e.target.value)}
+                    style={{ marginRight: '8px' }}
+                  />
+                  <button onClick={() => { saveTracked(ex, pr.reps, parseFloat(editLoad)); setEditing(null); }}>Save</button>
+                  <button onClick={() => setEditing(null)}>Cancel</button>
+                </div>
+              ) : (
+                <div key={pr.reps} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+                  <div style={prItemStyle}>{pr.reps} reps: {pr.maxLoad} lbs</div>
+                  <button onClick={() => { setEditing({ exercise: ex, reps: pr.reps }); setEditLoad(pr.maxLoad); }}>Edit</button>
+                  <button onClick={() => deleteTracked(ex, pr.reps)}>Delete</button>
+                </div>
+              )
+            ))}
+          </div>
+        ))}
+        <div style={{ marginTop: '20px' }}>
+          <h3>Add Tracked PR</h3>
+          <input
+            placeholder="Exercise"
+            value={newExercise}
+            onChange={e => setNewExercise(e.target.value)}
+            style={{ marginRight: '8px' }}
+          />
+          <input
+            type="number"
+            placeholder="Reps"
+            value={newReps}
+            onChange={e => setNewReps(e.target.value)}
+            style={{ marginRight: '8px' }}
+          />
+          <input
+            type="number"
+            placeholder="Load"
+            value={newLoad}
+            onChange={e => setNewLoad(e.target.value)}
+            style={{ marginRight: '8px' }}
+          />
+          <button onClick={handleAdd}>Add</button>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div style={containerStyle}>
@@ -200,6 +307,8 @@ export default function PRTracker({ onBack }) {
           ))}
         </div>
       )}
+      <hr style={{ margin: '40px 0' }} />
+      <TrackedPRSection />
     </div>
   );
-} 
+}

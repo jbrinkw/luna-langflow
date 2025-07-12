@@ -177,6 +177,39 @@ app.get('/api/prs', async (req, res) => {
   }
 });
 
+// CRUD endpoints for tracked PRs
+app.get('/api/tracked-prs', async (req, res) => {
+  try {
+    const prs = await db.getTrackedPRs();
+    res.json(prs);
+  } catch (error) {
+    console.error('Error getting tracked PRs:', error);
+    res.status(500).json({ error: 'Failed to get tracked PRs' });
+  }
+});
+
+app.put('/api/tracked-prs', async (req, res) => {
+  try {
+    const { exercise, reps, maxLoad } = req.body;
+    await db.upsertTrackedPR(exercise, reps, maxLoad);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error updating tracked PR:', error);
+    res.status(500).json({ error: 'Failed to update tracked PR' });
+  }
+});
+
+app.delete('/api/tracked-prs', async (req, res) => {
+  try {
+    const { exercise, reps } = req.body;
+    await db.deleteTrackedPR(exercise, reps);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error deleting tracked PR:', error);
+    res.status(500).json({ error: 'Failed to delete tracked PR' });
+  }
+});
+
 // Chat endpoint - connects to Python agent
 app.post('/api/chat', async (req, res) => {
   try {

@@ -34,6 +34,13 @@ DROP TABLE IF EXISTS exercises CASCADE;
 DROP TABLE IF EXISTS timer CASCADE;
 DROP TABLE IF EXISTS chat_messages CASCADE;
 
+CREATE TABLE tracked_prs (
+    exercise VARCHAR(255) NOT NULL,
+    reps INTEGER NOT NULL,
+    max_load REAL NOT NULL,
+    PRIMARY KEY (exercise, reps)
+);
+
 CREATE TABLE exercises (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) UNIQUE NOT NULL

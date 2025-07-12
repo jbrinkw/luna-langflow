@@ -41,6 +41,12 @@ async function initDb(sample = false) {
         load_done REAL,
         completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE TABLE IF NOT EXISTS tracked_prs (
+        exercise VARCHAR(255) NOT NULL,
+        reps INTEGER NOT NULL,
+        max_load REAL NOT NULL,
+        PRIMARY KEY (exercise, reps)
+      );
     `);
 
     if (sample) {
@@ -265,6 +271,55 @@ async function getPRs() {
   }
 }
 
+async function getTrackedPRs() {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      'SELECT exercise, reps, max_load FROM tracked_prs ORDER BY exercise, reps'
+    );
+    const prsByExercise = {};
+    for (const row of result.rows) {
+      if (!prsByExercise[row.exercise]) {
+        prsByExercise[row.exercise] = [];
+      }
+      prsByExercise[row.exercise].push({
+        reps: row.reps,
+        maxLoad: row.max_load,
+      });
+    }
+    return prsByExercise;
+  } finally {
+    client.release();
+  }
+}
+
+async function upsertTrackedPR(exercise, reps, maxLoad) {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `INSERT INTO tracked_prs (exercise, reps, max_load)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (exercise, reps)
+       DO UPDATE SET max_load = EXCLUDED.max_load`,
+      [exercise, reps, maxLoad]
+    );
+  } finally {
+    client.release();
+  }
+}
+
+async function deleteTrackedPR(exercise, reps) {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      'DELETE FROM tracked_prs WHERE exercise = $1 AND reps = $2',
+      [exercise, reps]
+    );
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   initDb,
   ensureDay,
@@ -279,4 +334,7 @@ module.exports = {
   updateSummary,
   deleteDay,
   getPRs,
+  getTrackedPRs,
+  upsertTrackedPR,
+  deleteTrackedPR,
 };
