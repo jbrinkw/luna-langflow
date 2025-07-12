@@ -30,7 +30,8 @@ async function initDb(sample = false) {
         exercise_id INTEGER REFERENCES exercises(id),
         order_num INTEGER NOT NULL,
         reps INTEGER NOT NULL,
-        load REAL NOT NULL
+        load REAL NOT NULL,
+        rest INTEGER DEFAULT 60
       );
       CREATE TABLE IF NOT EXISTS completed_sets (
         id SERIAL PRIMARY KEY,
@@ -49,6 +50,15 @@ async function initDb(sample = false) {
       );
       CREATE TABLE IF NOT EXISTS tracked_exercises (
         exercise VARCHAR(255) PRIMARY KEY
+      );
+      CREATE TABLE IF NOT EXISTS split_sets (
+        id SERIAL PRIMARY KEY,
+        day_of_week INTEGER NOT NULL,
+        exercise_id INTEGER REFERENCES exercises(id),
+        order_num INTEGER NOT NULL,
+        reps INTEGER NOT NULL,
+        load REAL NOT NULL,
+        rest INTEGER DEFAULT 60
       );
     `);
     
@@ -125,15 +135,101 @@ async function deleteDay(id) {
   }
 }
 
+async function getSplit(dayOfWeek) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT ss.id, e.name as exercise, ss.reps, ss.load, ss.rest, ss.order_num
+       FROM split_sets ss JOIN exercises e ON ss.exercise_id = e.id
+       WHERE ss.day_of_week = $1 ORDER BY ss.order_num`,
+      [dayOfWeek]
+    );
+    return result.rows;
+  } finally {
+    client.release();
+  }
+}
+
+async function getAllSplit() {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT ss.id, ss.day_of_week, e.name as exercise, ss.reps, ss.load, ss.rest, ss.order_num
+       FROM split_sets ss JOIN exercises e ON ss.exercise_id = e.id
+       ORDER BY ss.day_of_week, ss.order_num`
+    );
+    return result.rows;
+  } finally {
+    client.release();
+  }
+}
+
+async function addSplit(dayOfWeek, item) {
+  const client = await pool.connect();
+  try {
+    const exId = await getExerciseId(item.exercise);
+    const rest = item.rest || 60;
+    const result = await client.query(
+      'INSERT INTO split_sets (day_of_week, exercise_id, order_num, reps, load, rest) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+      [dayOfWeek, exId, item.order_num, item.reps, item.load, rest]
+    );
+    return result.rows[0].id;
+  } finally {
+    client.release();
+  }
+}
+
+async function updateSplit(id, item) {
+  const client = await pool.connect();
+  try {
+    const exId = await getExerciseId(item.exercise);
+    const rest = item.rest || 60;
+    await client.query(
+      'UPDATE split_sets SET exercise_id=$1, order_num=$2, reps=$3, load=$4, rest=$5 WHERE id=$6',
+      [exId, item.order_num, item.reps, item.load, rest, id]
+    );
+  } finally {
+    client.release();
+  }
+}
+
+async function deleteSplit(id) {
+  const client = await pool.connect();
+  try {
+    await client.query('DELETE FROM split_sets WHERE id = $1', [id]);
+  } finally {
+    client.release();
+  }
+}
+
+async function applySplitIfEmpty(logId, logDate) {
+  const client = await pool.connect();
+  try {
+    const countRes = await client.query('SELECT COUNT(*) FROM planned_sets WHERE log_id = $1', [logId]);
+    if (parseInt(countRes.rows[0].count) > 0) return;
+    const dow = new Date(logDate).getDay();
+    const splitRes = await client.query('SELECT exercise_id, order_num, reps, load, rest FROM split_sets WHERE day_of_week = $1 ORDER BY order_num', [dow]);
+    for (const row of splitRes.rows) {
+      await client.query('INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load, rest) VALUES ($1,$2,$3,$4,$5,$6)',
+        [logId, row.exercise_id, row.order_num, row.reps, row.load, row.rest]);
+    }
+  } finally {
+    client.release();
+  }
+}
+
 async function getDay(id) {
   const client = await pool.connect();
   try {
     const logResult = await client.query('SELECT id, log_date, summary FROM daily_logs WHERE id = $1', [id]);
     if (logResult.rows.length === 0) return null;
-    
+
     const log = logResult.rows[0];
-    
-      const planResult = await client.query(`
+
+    // If there is no plan for this day, load from weekly split
+    await applySplitIfEmpty(id, log.log_date);
+
+    const planResult = await client.query(`
     SELECT ps.id, e.name as exercise, ps.reps, ps.load, ps.rest, ps.order_num
     FROM planned_sets ps JOIN exercises e ON ps.exercise_id = e.id
     WHERE ps.log_id = $1 ORDER BY ps.order_num
@@ -385,6 +481,11 @@ module.exports = {
   deleteCompleted,
   updateSummary,
   deleteDay,
+  getSplit,
+  getAllSplit,
+  addSplit,
+  updateSplit,
+  deleteSplit,
   getPRs,
   getTrackedPRs,
   upsertTrackedPR,

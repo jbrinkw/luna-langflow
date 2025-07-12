@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import DayDetail from './DayDetail';
 import ChatBar from './ChatBar';
 import PRTracker from './PRTracker';
+import SplitPlanner from './SplitPlanner';
 
 export default function App() {
   const [days, setDays] = useState([]);
@@ -9,6 +10,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [showPRTracker, setShowPRTracker] = useState(false);
+  const [showSplitPlanner, setShowSplitPlanner] = useState(false);
 
   const loadDays = async () => {
     try {
@@ -59,11 +61,19 @@ export default function App() {
   const handleBack = () => {
     setSelected(null);
     setShowPRTracker(false);
+    setShowSplitPlanner(false);
     refreshDays(); // Refresh the list when going back
   };
 
   const handlePRTracker = () => {
     setShowPRTracker(true);
+    setSelected(null);
+    setShowSplitPlanner(false);
+  };
+
+  const handleSplitPlanner = () => {
+    setShowSplitPlanner(true);
+    setShowPRTracker(false);
     setSelected(null);
   };
 
@@ -163,6 +173,18 @@ export default function App() {
     fontWeight: 'bold'
   };
 
+  const splitButtonStyle = {
+    padding: '8px 16px',
+    backgroundColor: '#17a2b8',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 'bold',
+    marginLeft: '10px'
+  };
+
   return (
     <>
       <div style={containerStyle}>
@@ -177,9 +199,14 @@ export default function App() {
                   </div>
                 )}
               </div>
-              <button style={prButtonStyle} onClick={handlePRTracker}>
-                💪 View PRs
-              </button>
+              <div>
+                <button style={prButtonStyle} onClick={handlePRTracker}>
+                  💪 View PRs
+                </button>
+                <button style={splitButtonStyle} onClick={handleSplitPlanner}>
+                  📅 Edit Split
+                </button>
+              </div>
             </div>
             
             {loading && (
@@ -235,8 +262,11 @@ export default function App() {
             )}
           </div>
         )}
-        {selected && !showPRTracker && <DayDetail id={selected} onBack={handleBack} onDelete={deleteDay} />}
-        {showPRTracker && <PRTracker onBack={handleBack} />}
+        {selected && !showPRTracker && !showSplitPlanner && (
+          <DayDetail id={selected} onBack={handleBack} onDelete={deleteDay} />
+        )}
+        {showPRTracker && !showSplitPlanner && <PRTracker onBack={handleBack} />}
+        {showSplitPlanner && <SplitPlanner onBack={handleBack} />}
       </div>
       <ChatBar />
     </>

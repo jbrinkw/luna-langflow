@@ -55,6 +55,57 @@ app.get('/api/days/:id', async (req, res) => {
   }
 });
 
+// Split (weekly plan) endpoints
+app.get('/api/split', async (req, res) => {
+  try {
+    const split = await db.getAllSplit();
+    res.json(split);
+  } catch (error) {
+    console.error('Error getting split:', error);
+    res.status(500).json({ error: 'Failed to get split' });
+  }
+});
+
+app.get('/api/split/:day', async (req, res) => {
+  try {
+    const items = await db.getSplit(Number(req.params.day));
+    res.json(items);
+  } catch (error) {
+    console.error('Error getting split day:', error);
+    res.status(500).json({ error: 'Failed to get split day' });
+  }
+});
+
+app.post('/api/split/:day', async (req, res) => {
+  try {
+    const id = await db.addSplit(Number(req.params.day), req.body);
+    res.json({ id });
+  } catch (error) {
+    console.error('Error adding split set:', error);
+    res.status(500).json({ error: 'Failed to add split set' });
+  }
+});
+
+app.put('/api/split/plan/:id', async (req, res) => {
+  try {
+    await db.updateSplit(Number(req.params.id), req.body);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error updating split set:', error);
+    res.status(500).json({ error: 'Failed to update split set' });
+  }
+});
+
+app.delete('/api/split/plan/:id', async (req, res) => {
+  try {
+    await db.deleteSplit(Number(req.params.id));
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error deleting split set:', error);
+    res.status(500).json({ error: 'Failed to delete split set' });
+  }
+});
+
 app.post('/api/days/:id/plan', async (req, res) => {
   try {
     const id = await db.addPlan(req.params.id, req.body);
