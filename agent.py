@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from agents import Agent, Runner
 
 import tools
+from db import get_connection
+import psycopg2.extras
 
 # Use environment variable OPENAI_API_KEY by default
 
@@ -18,12 +20,107 @@ def get_timestamp():
     """Get current UTC timestamp in readable format"""
     return get_corrected_time().strftime("[%Y-%m-%d %H:%M:%S]")
 
+def get_recent_daily_summaries():
+    """Get the most recent 5 daily summaries"""
+    try:
+        conn = get_connection()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT log_date, summary 
+            FROM daily_logs 
+            WHERE summary IS NOT NULL AND summary != '' 
+            ORDER BY log_date DESC 
+            LIMIT 5
+        """)
+        summaries = cur.fetchall()
+        conn.close()
+        return summaries
+    except Exception as e:
+        print(f"Error fetching daily summaries: {e}")
+        return []
+
+def get_current_prs():
+    """Get current tracked PRs"""
+    try:
+        conn = get_connection()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        # Hardcoded tracked exercises (matching db.js)
+        tracked_exercises = ['Bench Press', 'Squat', 'Deadlift']
+        
+        cur.execute("""
+            SELECT 
+                e.name as exercise,
+                cs.reps_done,
+                MAX(cs.load_done) as max_load
+            FROM completed_sets cs
+            JOIN exercises e ON cs.exercise_id = e.id
+            WHERE e.name = ANY(%s)
+                AND cs.reps_done > 0
+                AND cs.load_done > 0
+            GROUP BY e.name, cs.reps_done
+            ORDER BY e.name, cs.reps_done
+        """, (tracked_exercises,))
+        
+        pr_data = cur.fetchall()
+        conn.close()
+        
+        # Group by exercise
+        prs_by_exercise = {}
+        for row in pr_data:
+            if row['exercise'] not in prs_by_exercise:
+                prs_by_exercise[row['exercise']] = []
+            prs_by_exercise[row['exercise']].append({
+                'reps': row['reps_done'],
+                'maxLoad': row['max_load']
+            })
+        
+        return prs_by_exercise
+    except Exception as e:
+        print(f"Error fetching PRs: {e}")
+        return {}
+
+def create_dynamic_context():
+    """Create dynamic context with recent summaries and PRs"""
+    context_parts = []
+    
+    # Add recent daily summaries
+    summaries = get_recent_daily_summaries()
+    if summaries:
+        context_parts.append("RECENT DAILY SUMMARIES:")
+        for summary in summaries:
+            context_parts.append(f"  {summary['log_date']}: {summary['summary']}")
+        context_parts.append("")
+    
+    # Add current PRs
+    prs = get_current_prs()
+    if prs:
+        context_parts.append("CURRENT TRACKED PERSONAL RECORDS:")
+        for exercise, pr_list in prs.items():
+            pr_strings = [f"{pr['reps']} rep{'s' if pr['reps'] != 1 else ''}: {pr['maxLoad']} lbs" for pr in pr_list]
+            context_parts.append(f"  {exercise}: {', '.join(pr_strings)}")
+        context_parts.append("")
+    
+    return "\n".join(context_parts)
+
 def create_agent() -> Agent:
     """Return a CoachByte agent configured with available tools."""
+    
+    # Get dynamic context (recent summaries and PRs)
+    dynamic_context = create_dynamic_context()
+    
+    # Build the full instructions with context first
+    base_instructions = "You are CoachByte, a fitness tracking assistant that helps manage workout plans and logs. "
+    
+    if dynamic_context:
+        full_instructions = dynamic_context + "\n" + base_instructions
+    else:
+        full_instructions = base_instructions
+    
     return Agent(
         name="CoachByte",
         instructions=(
-            "You are CoachByte, a fitness tracking assistant that helps manage workout plans and logs. "
+            full_instructions +
             "\n\nKey capabilities:"
             "\n- Create and modify workout plans using new_daily_plan (each set includes exercise, reps, load, rest time in seconds, and order)"
             "\n- Log completed exercises using log_completed_set"

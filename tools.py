@@ -28,7 +28,25 @@ def _get_exercise_id(conn, name: str) -> int:
 
 @function_tool(strict_mode=False)
 def new_daily_plan(items: List[Dict[str, Any]]):
-    """Create today's daily log and planned sets"""
+    """Create today's daily workout plan with a list of planned sets.
+    
+    Parameters:
+    - items: List of dictionaries, each containing:
+        - exercise (str): Exercise name (e.g., "bench press", "squat", "pull-ups")
+        - reps (int): Number of repetitions (1-100)
+        - load (float): Weight in pounds (0-2000). Use 0 for bodyweight exercises
+        - order (int): Set order/sequence number (1, 2, 3, etc.)
+        - rest (int, optional): Rest time in seconds (0-600). Defaults to 60 seconds
+    
+    Example:
+    items = [
+        {"exercise": "bench press", "reps": 10, "load": 135, "order": 1, "rest": 90},
+        {"exercise": "squat", "reps": 8, "load": 185, "order": 2, "rest": 120},
+        {"exercise": "pull-ups", "reps": 6, "load": 0, "order": 3, "rest": 60}
+    ]
+    
+    Returns: Success message with number of sets planned
+    """
     conn = get_connection()
     try:
         cur = conn.cursor()
@@ -57,7 +75,23 @@ def new_daily_plan(items: List[Dict[str, Any]]):
 
 @function_tool(strict_mode=False)
 def get_today_plan() -> List[Dict[str, Any]]:
-    """Return today's planned sets in workout order."""
+    """Retrieve today's planned workout sets in order.
+    
+    No parameters required.
+    
+    Returns: List of dictionaries, each containing:
+    - exercise (str): Exercise name
+    - reps (int): Planned repetitions
+    - load (float): Planned weight in pounds
+    - rest (int): Rest time in seconds
+    - order_num (int): Set sequence number
+    
+    Example return:
+    [
+        {"exercise": "bench press", "reps": 10, "load": 135.0, "rest": 90, "order_num": 1},
+        {"exercise": "squat", "reps": 8, "load": 185.0, "rest": 120, "order_num": 2}
+    ]
+    """
     conn = get_connection()
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -74,7 +108,22 @@ def get_today_plan() -> List[Dict[str, Any]]:
 
 @function_tool(strict_mode=False)
 def log_completed_set(exercise: str, reps: int, load: float):
-    """Record a completed set for today."""
+    """Record a completed set that was NOT part of the planned workout (for extra/unplanned sets).
+    
+    IMPORTANT: Use complete_planned_set() instead if completing a set from today's plan.
+    This function is for logging additional sets that weren't planned.
+    
+    Parameters:
+    - exercise (str): Exercise name (e.g., "bench press", "deadlift", "push-ups")
+    - reps (int): Number of repetitions completed (1-100)
+    - load (float): Weight used in pounds (0-2000). Use 0 for bodyweight exercises
+    
+    Examples:
+    - log_completed_set("push-ups", 20, 0)  # Bodyweight exercise
+    - log_completed_set("bench press", 8, 155)  # Weighted exercise
+    
+    Returns: "logged" on success
+    """
     if not (1 <= reps <= MAX_REPS):
         raise ValueError("reps out of range")
     if not (0 <= load <= MAX_LOAD):
@@ -96,7 +145,32 @@ def log_completed_set(exercise: str, reps: int, load: float):
 
 @function_tool(strict_mode=False)
 def complete_planned_set(exercise: Optional[str] = None, reps: Optional[int] = None, load: Optional[float] = None):
-    """Complete the next planned set, optionally overriding the planned values."""
+    """Complete the next planned set in the workout queue, with optional overrides.
+    
+    This is the PRIMARY function for completing planned sets during a workout.
+    It finds the next set in the queue and marks it as completed.
+    
+    Parameters (all optional):
+    - exercise (str, optional): Specific exercise name to complete. If not provided, 
+      completes the next set in order regardless of exercise
+    - reps (int, optional): Override planned reps with actual reps performed (1-100).
+      If not provided, uses the planned reps
+    - load (float, optional): Override planned weight with actual weight used (0-2000).
+      If not provided, uses the planned weight
+    
+    Behavior:
+    - With no parameters: Completes next set in queue with planned values
+    - With exercise only: Finds first planned set for that exercise
+    - With overrides: Uses provided values instead of planned values
+    
+    Examples:
+    - complete_planned_set()  # Complete next set with planned values
+    - complete_planned_set(reps=8)  # Complete next set but only did 8 reps
+    - complete_planned_set(exercise="squat")  # Complete next squat set
+    - complete_planned_set(exercise="bench press", reps=9, load=140)  # Override both
+    
+    Returns: Detailed completion message with actual values and timer info
+    """
     conn = get_connection()
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -188,7 +262,22 @@ def complete_planned_set(exercise: Optional[str] = None, reps: Optional[int] = N
 
 @function_tool(strict_mode=False)
 def update_summary(text: str):
-    """Update today's daily log summary."""
+    """Update today's workout summary with a descriptive text.
+    
+    This saves a summary of how the workout went, feelings, progress notes, etc.
+    
+    Parameters:
+    - text (str): Summary text describing the workout. Can be any length.
+      Examples: "Great session, felt strong", "Tough leg day, form was good", 
+      "PRed on bench press today!"
+    
+    Examples:
+    - update_summary("Excellent upper body session. Hit all planned sets.")
+    - update_summary("Struggled with squats today, but completed the workout.")
+    - update_summary("New PR on deadlift! 315x5 felt smooth.")
+    
+    Returns: "summary updated" on success
+    """
     conn = get_connection()
     try:
         cur = conn.cursor()
@@ -202,7 +291,28 @@ def update_summary(text: str):
 
 @function_tool(strict_mode=False)
 def get_recent_history(days: int) -> List[Dict[str, Any]]:
-    """Return planned and completed sets for the last ``days`` calendar days."""
+    """Retrieve workout history for the specified number of recent days.
+    
+    Shows both planned and completed sets to track progress and adherence.
+    
+    Parameters:
+    - days (int): Number of days to look back (1-30 recommended)
+    
+    Returns: List of dictionaries, each containing:
+    - log_date (str): Date of the workout (YYYY-MM-DD format)
+    - exercise (str): Exercise name
+    - reps (int): Planned repetitions (if planned)
+    - load (float): Planned weight in pounds (if planned)
+    - reps_done (int): Actual repetitions completed (if completed)
+    - load_done (float): Actual weight used in pounds (if completed)
+    
+    Examples:
+    - get_recent_history(3)  # Last 3 days
+    - get_recent_history(7)  # Last week
+    - get_recent_history(14) # Last 2 weeks
+    
+    Use this to analyze progress, identify patterns, or review recent workouts.
+    """
     conn = get_connection()
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -255,13 +365,54 @@ def _execute_sql(query: str, params: Optional[Dict[str, Any]] = None, confirm: b
 
 @function_tool(strict_mode=False)
 def run_sql(query: str, params: Optional[Dict[str, Any]] = None, confirm: bool = False):
-    """Run arbitrary SQL. Reject mutations unless confirm=True"""
+    """Execute SQL queries against the workout database.
+    
+    SELECT queries run automatically. UPDATE/INSERT/DELETE require confirm=True for safety.
+    
+    Parameters:
+    - query (str): SQL query to execute. Use %(param_name)s for parameter placeholders
+    - params (dict, optional): Dictionary of named parameters for the query
+    - confirm (bool): Must be True for UPDATE/INSERT/DELETE queries. Defaults to False
+    
+    Examples:
+    - run_sql("SELECT * FROM exercises")  # Simple select
+    - run_sql("SELECT * FROM exercises WHERE name = %(exercise)s", {"exercise": "squat"})
+    - run_sql("UPDATE exercises SET name = %(new_name)s WHERE id = %(id)s", 
+              {"new_name": "back squat", "id": 1}, confirm=True)  # Requires confirm=True
+    
+    Returns: 
+    - For SELECT: List of dictionaries with query results
+    - For UPDATE/INSERT/DELETE: Dictionary with "rows_affected" count
+    
+    Safety: Only SELECT queries are allowed without confirm=True to prevent accidental data changes.
+    """
     return _execute_sql(query, params, confirm)
 
 
 @function_tool(strict_mode=False)
 def arbitrary_update(query: str, params: Optional[Dict[str, Any]] = None):
-    """Execute a confirmed SQL statement for updates or inserts."""
+    """Execute UPDATE, INSERT, or DELETE SQL statements with automatic confirmation.
+    
+    This is a convenience function that automatically sets confirm=True for database modifications.
+    Use when you need to modify data without explicitly passing confirm=True to run_sql.
+    
+    Parameters:
+    - query (str): SQL UPDATE, INSERT, or DELETE statement. Use %(param_name)s for parameters
+    - params (dict, optional): Dictionary of named parameters for the query
+    
+    Examples:
+    - arbitrary_update("UPDATE planned_sets SET load = %(new_load)s WHERE id = %(set_id)s", 
+                       {"new_load": 185, "set_id": 1})
+    - arbitrary_update("INSERT INTO exercises (name) VALUES (%(exercise_name)s)", 
+                       {"exercise_name": "overhead press"})
+    - arbitrary_update("DELETE FROM planned_sets WHERE order_num > %(max_order)s", 
+                       {"max_order": 10})
+    
+    Returns: Dictionary with "rows_affected" count showing how many rows were modified
+    
+    Note: This function is for advanced use cases. Most operations should use the specific 
+    functions like new_daily_plan, complete_planned_set, etc.
+    """
     if params is None:
         params = {}
     return _execute_sql(query, params=params, confirm=True)
@@ -269,7 +420,29 @@ def arbitrary_update(query: str, params: Optional[Dict[str, Any]] = None):
 
 @function_tool(strict_mode=False)
 def set_timer(minutes: int):
-    """Set a workout timer for the specified number of minutes."""
+    """Set a workout timer for rest periods or workout duration.
+    
+    Useful for timing rest between sets or entire workout duration.
+    Timer runs in the background and can be checked with get_timer().
+    
+    Parameters:
+    - minutes (int): Timer duration in minutes (1-180). Max 3 hours
+    
+    Common timer durations:
+    - 1-2 minutes: Rest between light sets
+    - 2-3 minutes: Rest between moderate sets  
+    - 3-5 minutes: Rest between heavy compound movements
+    - 45-90 minutes: Total workout duration
+    
+    Examples:
+    - set_timer(3)   # 3-minute rest timer
+    - set_timer(90)  # 90-minute workout timer
+    - set_timer(2)   # 2-minute rest between sets
+    
+    Returns: Success message with timer duration or error message
+    
+    Note: Setting a new timer will replace any existing timer.
+    """
     if not (1 <= minutes <= 180):  # Max 3 hours
         raise ValueError("Timer duration must be between 1 and 180 minutes")
     
@@ -291,7 +464,30 @@ def set_timer(minutes: int):
 
 @function_tool(strict_mode=False)
 def get_timer() -> Dict[str, Any]:
-    """Get current timer status - shows remaining time or if timer has expired."""
+    """Check the current timer status and remaining time.
+    
+    Use this to see how much time is left on a rest timer or workout timer.
+    
+    No parameters required.
+    
+    Returns: Dictionary containing:
+    - status (str): Timer state - "running", "expired", "no_timer", or "error"  
+    - remaining_seconds (int): Seconds left (if status is "running")
+    - message (str): Human-readable status message
+    
+    Possible statuses:
+    - "running": Timer is active with remaining_seconds showing time left
+    - "expired": Timer has finished - time to get back to work!
+    - "no_timer": No timer is currently set
+    - "error": Problem checking timer status
+    
+    Examples:
+    - get_timer() might return {"status": "running", "remaining_seconds": 120, "message": "2:00 remaining"}
+    - get_timer() might return {"status": "expired", "message": "Timer expired!"}
+    - get_timer() might return {"status": "no_timer", "message": "No timer set"}
+    
+    Use this between sets to check if rest time is up.
+    """
     try:
         import subprocess
         import os

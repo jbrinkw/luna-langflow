@@ -142,11 +142,7 @@ export default function App() {
     color: 'white'
   };
 
-  const deleteButtonStyle = {
-    ...buttonStyle,
-    backgroundColor: '#dc3545',
-    color: 'white'
-  };
+
 
   const codeStyle = {
     backgroundColor: '#f8f9fa',
@@ -231,12 +227,6 @@ export default function App() {
                         >
                           View Details
                         </button>
-                        <button 
-                          style={deleteButtonStyle} 
-                          onClick={() => deleteDay(d.id)}
-                        >
-                          Delete
-                        </button>
                       </td>
                     </tr>
                   ))}
@@ -245,7 +235,7 @@ export default function App() {
             )}
           </div>
         )}
-        {selected && !showPRTracker && <DayDetail id={selected} onBack={handleBack} />}
+        {selected && !showPRTracker && <DayDetail id={selected} onBack={handleBack} onDelete={deleteDay} />}
         {showPRTracker && <PRTracker onBack={handleBack} />}
       </div>
       <ChatBar />

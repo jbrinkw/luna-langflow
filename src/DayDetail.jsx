@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-export default function DayDetail({ id, onBack }) {
+export default function DayDetail({ id, onBack, onDelete }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -9,6 +9,7 @@ export default function DayDetail({ id, onBack }) {
   const [isCompleting, setIsCompleting] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [timerStatus, setTimerStatus] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   const loadTimer = async () => {
     try {
@@ -146,6 +147,27 @@ export default function DayDetail({ id, onBack }) {
     setCompletionForm(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleDelete = async () => {
+    if (!deleteConfirm) {
+      // First click - show confirmation
+      setDeleteConfirm(true);
+      // Reset confirmation after 3 seconds if user doesn't confirm
+      setTimeout(() => setDeleteConfirm(false), 3000);
+    } else {
+      // Second click - actually delete
+      try {
+        await fetch(`/api/days/${id}`, { method: 'DELETE' });
+        onBack(); // Navigate back to the list
+        if (onDelete) {
+          onDelete(id); // Update the parent component's state
+        }
+      } catch (err) {
+        console.error('Error deleting day:', err);
+        setDeleteConfirm(false); // Reset on error
+      }
+    }
+  };
+
   // Styles
   const containerStyle = {
     fontFamily: 'Arial, sans-serif',
@@ -170,6 +192,16 @@ export default function DayDetail({ id, onBack }) {
     border: 'none',
     borderRadius: '4px',
     cursor: 'pointer'
+  };
+
+  const deleteButtonStyle = {
+    padding: '8px 16px',
+    backgroundColor: deleteConfirm ? '#dc3545' : '#6c757d',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    marginLeft: '10px'
   };
 
   const workoutSectionStyle = {
@@ -331,7 +363,12 @@ export default function DayDetail({ id, onBack }) {
             </div>
           )}
         </div>
-        <button style={backButtonStyle} onClick={onBack}>← Back</button>
+        <div>
+          <button style={backButtonStyle} onClick={onBack}>← Back</button>
+          <button style={deleteButtonStyle} onClick={handleDelete}>
+            {deleteConfirm ? 'Confirm Delete?' : '🗑️ Delete Day'}
+          </button>
+        </div>
       </div>
       
       {/* Complete Set Section */}
