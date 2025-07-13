@@ -1,20 +1,52 @@
 # CoachByte Agent Demo
 
-This demo shows a simple agent built with the OpenAI Agents SDK connected to a PostgreSQL database for tracking workouts. Tools mirror the planned production API.
+Luna Langflow is a full-stack example of using the OpenAI Agents SDK to manage a workout tracker.  A Python agent talks to a PostgreSQL database using a set of specialized tools.  A small Node/React interface exposes the agent through a web API so you can plan workouts, log sets and track personal records from chat or the UI.
 
-## Setup
-1. Install requirements:
+## How the App Works (Conceptual Overview)
+- **Chat driven workflow:** user messages are passed to the Python agent which decides which tool to run.
+- **Workout database:** all plans and completed sets are stored in PostgreSQL.  The agent can read or modify this data through tools such as `new_daily_plan`, `complete_planned_set` and `update_summary`.
+- **Timers and PR tracking:** helper tools manage rest timers and personal-record data.
+- **Web interface:** the React app (served by the Node server) visualizes your workout history and provides a chat bar that talks to the agent.
+
+### What You Can Do
+- Create or edit today’s workout plan and a weekly split.
+- Mark sets as completed and automatically start rest timers.
+- Save daily summaries and query recent history.
+- Track personal records and ask the agent about them.
+
+## Developer Guide
+The project combines a Python backend with a small JavaScript frontend.
+
+### Folder Structure
+- `agent.py` and `tools.py` – OpenAI agent setup and tool implementations.
+- `db.py` – PostgreSQL helpers and schema creation.
+- `server.js` – Express server acting as an API gateway and invoking the Python agent.
+- `src/` – React components served via Vite.
+
+### Setup
+1. Install Python dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-2. Set an `OPENAI_API_KEY` environment variable for the agent.
+2. Install Node packages:
+   ```bash
+   npm install
+   ```
+3. Configure environment variables for PostgreSQL (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`) and your `OPENAI_API_KEY`.  See `db_config.py` for details.
+4. (Optional) load sample data:
+   ```bash
+   python load_sample_data.py
+   ```
 
-## Running Tests
-There are two test scripts. Each one sends natural language prompts so the agent chooses the right tools:
+### Running
+- Development mode with hot reload for the UI and API:
+  ```bash
+  npm run dev-all
+  ```
+- Production style server:
+  ```bash
+  npm start
+  ```
+  Then open the web interface at `http://localhost:3001`.
 
-```bash
-python test_tools.py       # exercises all dedicated tools
-python test_arbitrary.py   # demonstrates the arbitrary_update escape hatch
-```
-
-Run `demo_chat.py` to interact with the agent in a simple console chat powered by the OpenAI Agents SDK.
+For database migration steps or more details on PostgreSQL configuration see `README_POSTGRES.md`.
