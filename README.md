@@ -47,6 +47,26 @@ The project combines a Python backend with a small JavaScript frontend.
   ```bash
   npm start
   ```
-  Then open the web interface at `http://localhost:3001`.
+Then open the web interface at `http://localhost:3001`.
 
 For database migration steps or more details on PostgreSQL configuration see `README_POSTGRES.md`.
+
+### Home Assistant Integration
+The server exposes a helper endpoint to complete the next planned set for today.
+
+- **POST `/api/complete-today-set`** – runs the `complete_planned_set` helper and
+  returns a JSON message.
+
+To trigger this from a Zigbee button you can create a `rest_command` in
+`configuration.yaml`:
+
+```yaml
+rest_command:
+  complete_workout_set:
+    url: "http://<server-ip>:3001/api/complete-today-set"
+    method: POST
+```
+
+Create an automation for your button that calls `rest_command.complete_workout_set`
+whenever it is pressed. Each press logs the next set and starts the rest timer
+just like clicking **Complete Set** in the web UI.

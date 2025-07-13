@@ -436,6 +436,45 @@ app.get('/api/timer', async (req, res) => {
   }
 });
 
+// Complete the next planned set for today (for automation)
+app.post('/api/complete-today-set', async (req, res) => {
+  try {
+    const { spawn } = require('child_process');
+    const path = require('path');
+    const script = path.join(__dirname, 'complete_next_set.py');
+    const pythonProcess = spawn('python', [script]);
+
+    let responseData = '';
+    let errorData = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+      responseData += data.toString();
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      errorData += data.toString();
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code === 0) {
+        try {
+          const result = JSON.parse(responseData.trim());
+          res.json(result);
+        } catch (err) {
+          res.json({ message: responseData.trim() });
+        }
+      } else {
+        console.error('Python process error:', errorData);
+        res.status(500).json({ error: 'Failed to complete set' });
+      }
+    });
+
+  } catch (error) {
+    console.error('Error completing set:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Serve the React app for the root route
 app.get('/', (req, res) => {
   res.sendFile(path.resolve(__dirname, 'index.html'));
