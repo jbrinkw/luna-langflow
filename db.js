@@ -76,6 +76,16 @@ async function initDb(sample = false) {
       );
     `);
     
+    // Add 'relative' column to split_sets if it doesn't exist, for backward compatibility
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='split_sets' AND column_name='relative') THEN
+          ALTER TABLE split_sets ADD COLUMN relative BOOLEAN DEFAULT FALSE;
+        END IF;
+      END $$;
+    `);
+
     // Initialize with default tracked exercises if none exist
     const result = await client.query('SELECT COUNT(*) FROM tracked_exercises');
     if (parseInt(result.rows[0].count) === 0) {
