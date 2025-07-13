@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 export default function EditSplitPage({ onBack }) {
   const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  const emptySet = { exercise: '', reps: 0, load: 0, rest: 60, order_num: 1 };
+  const emptySet = { exercise: '', reps: 0, load: 0, rest: 60, order_num: 1, relative: false };
   const [split, setSplit] = useState(() => Object.fromEntries(dayNames.map((_,i)=>[i,[]])));
   const [newSets, setNewSets] = useState(() => Object.fromEntries(dayNames.map((_,i)=>[i,{...emptySet}])));
   const [loading, setLoading] = useState(true);
@@ -98,6 +98,9 @@ export default function EditSplitPage({ onBack }) {
                   <td style={tdStyle}>
                     <input style={numberInputStyle} type="number" value={p.load}
                       onChange={e=>handleChange(idx,i,'load',e.target.value)} />
+                    <input type="checkbox" style={{marginLeft:'4px'}}
+                      checked={p.relative || false}
+                      onChange={e=>handleChange(idx,i,'relative',e.target.checked)} />
                   </td>
                   <td style={tdStyle}>
                     <input style={restInputStyle} type="number" value={p.rest || 60}
@@ -125,6 +128,9 @@ export default function EditSplitPage({ onBack }) {
                 <td style={tdStyle}>
                   <input style={numberInputStyle} type="number" value={newSets[idx].load}
                     onChange={e=>setNewSets({...newSets,[idx]:{...newSets[idx],load:e.target.value}})} />
+                  <input type="checkbox" style={{marginLeft:'4px'}}
+                    checked={newSets[idx].relative || false}
+                    onChange={e=>setNewSets({...newSets,[idx]:{...newSets[idx],relative:e.target.checked}})} />
                 </td>
                 <td style={tdStyle}>
                   <input style={restInputStyle} type="number" value={newSets[idx].rest}

@@ -71,7 +71,8 @@ async function initDb(sample = false) {
         order_num INTEGER NOT NULL,
         reps INTEGER NOT NULL,
         load REAL NOT NULL,
-        rest INTEGER DEFAULT 60
+        rest INTEGER DEFAULT 60,
+        relative BOOLEAN DEFAULT FALSE
       );
     `);
     
@@ -162,7 +163,7 @@ async function getSplit(dayOfWeek) {
   const client = await pool.connect();
   try {
     const result = await client.query(
-      `SELECT ss.id, e.name as exercise, ss.reps, ss.load, ss.rest, ss.order_num
+      `SELECT ss.id, e.name as exercise, ss.reps, ss.load, ss.rest, ss.order_num, ss.relative
        FROM split_sets ss JOIN exercises e ON ss.exercise_id = e.id
        WHERE ss.day_of_week = $1 ORDER BY ss.order_num`,
       [dayOfWeek]
@@ -177,7 +178,7 @@ async function getAllSplit() {
   const client = await pool.connect();
   try {
     const result = await client.query(
-      `SELECT ss.id, ss.day_of_week, e.name as exercise, ss.reps, ss.load, ss.rest, ss.order_num
+      `SELECT ss.id, ss.day_of_week, e.name as exercise, ss.reps, ss.load, ss.rest, ss.order_num, ss.relative
        FROM split_sets ss JOIN exercises e ON ss.exercise_id = e.id
        ORDER BY ss.day_of_week, ss.order_num`
     );
@@ -193,8 +194,8 @@ async function addSplit(dayOfWeek, item) {
     const exId = await getExerciseId(item.exercise);
     const rest = item.rest || 60;
     const result = await client.query(
-      'INSERT INTO split_sets (day_of_week, exercise_id, order_num, reps, load, rest) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
-      [dayOfWeek, exId, item.order_num, item.reps, item.load, rest]
+      'INSERT INTO split_sets (day_of_week, exercise_id, order_num, reps, load, rest, relative) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
+      [dayOfWeek, exId, item.order_num, item.reps, item.load, rest, item.relative || false]
     );
     return result.rows[0].id;
   } finally {
@@ -208,8 +209,8 @@ async function updateSplit(id, item) {
     const exId = await getExerciseId(item.exercise);
     const rest = item.rest || 60;
     await client.query(
-      'UPDATE split_sets SET exercise_id=$1, order_num=$2, reps=$3, load=$4, rest=$5 WHERE id=$6',
-      [exId, item.order_num, item.reps, item.load, rest, id]
+      'UPDATE split_sets SET exercise_id=$1, order_num=$2, reps=$3, load=$4, rest=$5, relative=$6 WHERE id=$7',
+      [exId, item.order_num, item.reps, item.load, rest, item.relative || false, id]
     );
   } finally {
     client.release();
@@ -232,10 +233,34 @@ async function applySplitIfEmpty(logId, logDate) {
     if (parseInt(countRes.rows[0].count) > 0) return;
     // By appending T00:00:00, we ensure this is parsed as a local date, not UTC
     const dow = new Date(logDate + 'T00:00:00').getDay();
-    const splitRes = await client.query('SELECT exercise_id, order_num, reps, load, rest FROM split_sets WHERE day_of_week = $1 ORDER BY order_num', [dow]);
+    const splitRes = await client.query(
+      `SELECT ss.exercise_id, e.name as exercise, ss.order_num, ss.reps, ss.load, ss.rest, ss.relative
+       FROM split_sets ss JOIN exercises e ON ss.exercise_id = e.id
+       WHERE ss.day_of_week = $1 ORDER BY ss.order_num`, [dow]);
+
+    const prs = await getPRs();
+    const oneRMs = {};
+    for (const [ex, records] of Object.entries(prs)) {
+      let max = 0;
+      for (const r of records) {
+        const est = r.reps === 1 ? r.maxLoad : r.maxLoad * (1 + r.reps / 30);
+        if (est > max) max = est;
+      }
+      oneRMs[ex] = max;
+    }
+
     for (const row of splitRes.rows) {
+      let load = row.load;
+      if (row.relative) {
+        const rm = oneRMs[row.exercise];
+        if (rm) {
+          load = Math.round(rm * row.load / 100);
+        } else {
+          load = 0;
+        }
+      }
       await client.query('INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load, rest) VALUES ($1,$2,$3,$4,$5,$6)',
-        [logId, row.exercise_id, row.order_num, row.reps, row.load, row.rest]);
+        [logId, row.exercise_id, row.order_num, row.reps, load, row.rest]);
     }
   } finally {
     client.release();

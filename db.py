@@ -52,7 +52,8 @@ CREATE TABLE split_sets (
     order_num INTEGER NOT NULL,
     reps INTEGER NOT NULL,
     load REAL NOT NULL,
-    rest INTEGER DEFAULT 60
+    rest INTEGER DEFAULT 60,
+    relative BOOLEAN DEFAULT FALSE
 );
 CREATE INDEX IF NOT EXISTS ix_split_order ON split_sets (day_of_week, order_num);
 

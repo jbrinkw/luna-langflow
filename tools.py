@@ -378,9 +378,10 @@ def set_weekly_split_day(day: str, items: List[Dict[str, Any]]):
                 raise ValueError("rest out of range")
             ex_id = _get_exercise_id(conn, item["exercise"])
             order_num = int(item.get("order", item.get("order_num", 1)))
+            relative = bool(item.get("relative", False))
             cur.execute(
-                "INSERT INTO split_sets (day_of_week, exercise_id, order_num, reps, load, rest) VALUES (%s,%s,%s,%s,%s,%s)",
-                (day_num, ex_id, order_num, reps, load, rest),
+                "INSERT INTO split_sets (day_of_week, exercise_id, order_num, reps, load, rest, relative) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                (day_num, ex_id, order_num, reps, load, rest, relative),
             )
         conn.commit()
     finally:
@@ -402,14 +403,14 @@ def get_weekly_split(day: Optional[str] = None) -> List[Dict[str, Any]]:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         if day is None:
             cur.execute(
-                "SELECT day_of_week, e.name as exercise, reps, load, rest, order_num FROM split_sets ss JOIN exercises e ON ss.exercise_id = e.id ORDER BY day_of_week, order_num"
+                "SELECT day_of_week, e.name as exercise, reps, load, rest, order_num, relative FROM split_sets ss JOIN exercises e ON ss.exercise_id = e.id ORDER BY day_of_week, order_num"
             )
         else:
             key = day.lower()
             if key not in DAY_MAP:
                 raise ValueError("invalid day")
             cur.execute(
-                "SELECT e.name as exercise, reps, load, rest, order_num FROM split_sets ss JOIN exercises e ON ss.exercise_id = e.id WHERE day_of_week = %s ORDER BY order_num",
+                "SELECT e.name as exercise, reps, load, rest, order_num, relative FROM split_sets ss JOIN exercises e ON ss.exercise_id = e.id WHERE day_of_week = %s ORDER BY order_num",
                 (DAY_MAP[key],),
             )
         rows = [dict(row) for row in cur.fetchall()]
