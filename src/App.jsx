@@ -3,6 +3,8 @@ import DayDetail from './DayDetail';
 import ChatBar from './ChatBar';
 import PRTracker from './PRTracker';
 import SplitPlanner from './SplitPlanner';
+import EditSplitPage from './EditSplitPage';
+import { format, parseISO } from 'date-fns';
 
 export default function App() {
   const [days, setDays] = useState([]);
@@ -11,6 +13,7 @@ export default function App() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [showPRTracker, setShowPRTracker] = useState(false);
   const [showSplitPlanner, setShowSplitPlanner] = useState(false);
+  const [showEditSplitPage, setShowEditSplitPage] = useState(false);
 
   const loadDays = async () => {
     try {
@@ -59,11 +62,19 @@ export default function App() {
   };
 
   const handleBack = () => {
+    setShowPRTracker(false);
+    setShowSplitPlanner(false);
+    setShowEditSplitPage(false);
+    setSelected(null);
+    refreshDays(); // Refresh the list when going back
+  };
+
+  const handleEditSplit = () => {
+    setShowEditSplitPage(true);
     setSelected(null);
     setShowPRTracker(false);
     setShowSplitPlanner(false);
-    refreshDays(); // Refresh the list when going back
-  };
+  }
 
   const handlePRTracker = () => {
     setShowPRTracker(true);
@@ -185,88 +196,95 @@ export default function App() {
     marginLeft: '10px'
   };
 
+  const mainView = (
+    <div>
+      <div style={headerStyle}>
+        <div>
+          <h1 style={titleStyle}>🏋️ Workout Tracker</h1>
+          {lastUpdated && (
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              Last updated: {lastUpdated.toLocaleTimeString()}
+            </div>
+          )}
+        </div>
+        <div>
+          <button style={prButtonStyle} onClick={handlePRTracker}>
+            💪 View PRs
+          </button>
+          <button style={splitButtonStyle} onClick={handleEditSplit}>
+            📅 Edit Split
+          </button>
+        </div>
+      </div>
+      
+      {loading && (
+        <div style={loadingStyle}>
+          <p>Loading workout days...</p>
+        </div>
+      )}
+      
+      {!loading && days.length === 0 && (
+        <div style={emptyStateStyle}>
+          <h3>No workout days found</h3>
+          <p>Get started by loading some sample data:</p>
+          <p>Run <code style={codeStyle}>npm run load-sample</code> to load sample data.</p>
+        </div>
+      )}
+      
+      {!loading && days.length > 0 && (
+        <table style={tableStyle}>
+          <thead>
+            <tr>
+              <th style={thStyle}>📅 Date</th>
+              <th style={thStyle}>📝 Summary</th>
+              <th style={thStyle}>⚡ Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {days.map(d => (
+              <tr key={d.id}>
+                <td style={tdStyle}>
+                  <strong>{format(parseISO(d.log_date), 'EEE, MMM d, yyyy')}</strong>
+                </td>
+                <td style={tdStyle}>
+                  {d.summary ? (
+                    <div style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {d.summary}
+                    </div>
+                  ) : (
+                    <em style={{ color: '#666' }}>No summary</em>
+                  )}
+                </td>
+                <td style={tdStyle}>
+                  <button 
+                    style={viewButtonStyle} 
+                    onClick={() => setSelected(d.id)}
+                  >
+                    View Details
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+
   return (
     <>
       <div style={containerStyle}>
-        {!selected && !showPRTracker && (
-          <div>
-            <div style={headerStyle}>
-              <div>
-                <h1 style={titleStyle}>🏋️ Workout Tracker</h1>
-                {lastUpdated && (
-                  <div style={{ fontSize: '12px', color: '#666' }}>
-                    Last updated: {lastUpdated.toLocaleTimeString()}
-                  </div>
-                )}
-              </div>
-              <div>
-                <button style={prButtonStyle} onClick={handlePRTracker}>
-                  💪 View PRs
-                </button>
-                <button style={splitButtonStyle} onClick={handleSplitPlanner}>
-                  📅 Edit Split
-                </button>
-              </div>
-            </div>
-            
-            {loading && (
-              <div style={loadingStyle}>
-                <p>Loading workout days...</p>
-              </div>
-            )}
-            
-            {!loading && days.length === 0 && (
-              <div style={emptyStateStyle}>
-                <h3>No workout days found</h3>
-                <p>Get started by loading some sample data:</p>
-                <p>Run <code style={codeStyle}>npm run load-sample</code> to load sample data.</p>
-              </div>
-            )}
-            
-            {!loading && days.length > 0 && (
-              <table style={tableStyle}>
-                <thead>
-                  <tr>
-                    <th style={thStyle}>📅 Date</th>
-                    <th style={thStyle}>📝 Summary</th>
-                    <th style={thStyle}>⚡ Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {days.map(d => (
-                    <tr key={d.id}>
-                      <td style={tdStyle}>
-                        <strong>{d.log_date}</strong>
-                      </td>
-                      <td style={tdStyle}>
-                        {d.summary ? (
-                          <div style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {d.summary}
-                          </div>
-                        ) : (
-                          <em style={{ color: '#666' }}>No summary</em>
-                        )}
-                      </td>
-                      <td style={tdStyle}>
-                        <button 
-                          style={viewButtonStyle} 
-                          onClick={() => setSelected(d.id)}
-                        >
-                          View Details
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        )}
-        {selected && !showPRTracker && !showSplitPlanner && (
+        {showEditSplitPage ? (
+          <EditSplitPage onBack={handleBack} />
+        ) : showSplitPlanner ? (
+          <SplitPlanner onBack={handleBack} />
+        ) : showPRTracker ? (
+          <PRTracker onBack={handleBack} />
+        ) : selected ? (
           <DayDetail id={selected} onBack={handleBack} onDelete={deleteDay} />
+        ) : (
+          mainView
         )}
-        {showPRTracker && !showSplitPlanner && <PRTracker onBack={handleBack} />}
-        {showSplitPlanner && <SplitPlanner onBack={handleBack} />}
       </div>
       <ChatBar />
     </>

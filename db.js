@@ -1,4 +1,17 @@
 const { Pool } = require('pg');
+const { format } = require('date-fns');
+
+function getTodayInEst() {
+  const estFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  const parts = estFormatter.formatToParts(new Date());
+  const partValue = (type) => parts.find(p => p.type === type).value;
+  return `${partValue('year')}-${partValue('month')}-${partValue('day')}`;
+}
 
 // Database configuration
 const dbConfig = {
@@ -72,7 +85,10 @@ async function initDb(sample = false) {
     }
     
     if (sample) {
-      await populateSample(client);
+      const exercisesExist = await client.query('SELECT COUNT(*) FROM exercises');
+      if (parseInt(exercisesExist.rows[0].count) === 0) {
+        await populateSample(client);
+      }
     }
   } finally {
     client.release();
@@ -109,7 +125,7 @@ async function ensureDay(dateStr) {
 }
 
 async function ensureTodayPlan() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getTodayInEst();
   const logId = await ensureDay(today);
   await applySplitIfEmpty(logId, today);
   return logId;
@@ -214,7 +230,8 @@ async function applySplitIfEmpty(logId, logDate) {
   try {
     const countRes = await client.query('SELECT COUNT(*) FROM planned_sets WHERE log_id = $1', [logId]);
     if (parseInt(countRes.rows[0].count) > 0) return;
-    const dow = new Date(logDate).getDay();
+    // By appending T00:00:00, we ensure this is parsed as a local date, not UTC
+    const dow = new Date(logDate + 'T00:00:00').getDay();
     const splitRes = await client.query('SELECT exercise_id, order_num, reps, load, rest FROM split_sets WHERE day_of_week = $1 ORDER BY order_num', [dow]);
     for (const row of splitRes.rows) {
       await client.query('INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load, rest) VALUES ($1,$2,$3,$4,$5,$6)',
@@ -234,7 +251,9 @@ async function getDay(id) {
     const log = logResult.rows[0];
 
     // If there is no plan for this day, load from weekly split
-    await applySplitIfEmpty(id, log.log_date);
+    // Re-format the date to a string to ensure consistent processing
+    const dateString = format(log.log_date, 'yyyy-MM-dd');
+    await applySplitIfEmpty(id, dateString);
 
     const planResult = await client.query(`
     SELECT ps.id, e.name as exercise, ps.reps, ps.load, ps.rest, ps.order_num
@@ -466,13 +485,103 @@ async function removeTrackedExercise(exercise) {
 }
 
 async function populateSample(client) {
-  const today = new Date().toISOString().slice(0,10);
-  const logId = await ensureDay(today);
-  const exId = await getExerciseId('bench press');
-  await client.query(
-    'INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING',
-    [logId, exId, 1, 10, 100]
-  );
+  // Clear existing data for a clean slate
+  await client.query('DELETE FROM completed_sets');
+  await client.query('DELETE FROM planned_sets');
+  await client.query('DELETE FROM split_sets');
+  await client.query('DELETE FROM daily_logs');
+  await client.query('DELETE FROM exercises');
+
+  // Define exercises
+  const exercises = [
+    'Bench Press', 'Squat', 'Deadlift', 'Overhead Press',
+    'Pull-up', 'Bent Over Row', 'Leg Press', 'Bicep Curl', 'Tricep Extension',
+    'Plank', 'Running'
+  ];
+  const exIds = {};
+  for (const name of exercises) {
+    exIds[name] = await getExerciseId(name);
+  }
+
+  // Define a 7-day split
+  const sampleSplit = [
+    { day: 0, name: 'Active Recovery', workouts: [ // Sunday
+      { ex: 'Running', sets: [{ reps: 1, load: 20, rest: 0, order: 1 }] }, // 20 minutes
+      { ex: 'Plank', sets: [{ reps: 1, load: 60, rest: 60, order: 2 }] } // 60 seconds
+    ]},
+    { day: 1, name: 'Push Day', workouts: [ // Monday
+      { ex: 'Bench Press', sets: [{ reps: 5, load: 135, rest: 90, order: 1 }, { reps: 5, load: 135, rest: 90, order: 2 }] },
+      { ex: 'Overhead Press', sets: [{ reps: 8, load: 80, rest: 75, order: 3 }] },
+      { ex: 'Tricep Extension', sets: [{ reps: 10, load: 40, rest: 60, order: 4 }] }
+    ]},
+    { day: 2, name: 'Core & Cardio', workouts: [ // Tuesday
+      { ex: 'Plank', sets: [{ reps: 3, load: 60, rest: 60, order: 1 }] }, // 3 sets of 60s
+      { ex: 'Running', sets: [{ reps: 1, load: 15, rest: 0, order: 2 }] } // 15 minutes
+    ]},
+    { day: 3, name: 'Pull Day', workouts: [ // Wednesday
+      { ex: 'Deadlift', sets: [{ reps: 3, load: 225, rest: 120, order: 1 }] },
+      { ex: 'Pull-up', sets: [{ reps: 8, load: 0, rest: 75, order: 2 }] },
+      { ex: 'Bent Over Row', sets: [{ reps: 8, load: 115, rest: 75, order: 3 }] },
+      { ex: 'Bicep Curl', sets: [{ reps: 10, load: 30, rest: 60, order: 4 }] }
+    ]},
+    { day: 4, name: 'Active Recovery', workouts: [ // Thursday
+      { ex: 'Running', sets: [{ reps: 1, load: 25, rest: 0, order: 1 }] } // 25 minutes
+    ]},
+    { day: 5, name: 'Leg Day', workouts: [ // Friday
+      { ex: 'Squat', sets: [{ reps: 5, load: 185, rest: 120, order: 1 }] },
+      { ex: 'Leg Press', sets: [{ reps: 10, load: 250, rest: 90, order: 2 }] }
+    ]},
+    { day: 6, name: 'Conditioning', workouts: [ // Saturday
+      { ex: 'Plank', sets: [{ reps: 3, load: 75, rest: 60, order: 1 }] },
+      { ex: 'Running', sets: [{ reps: 1, load: 10, rest: 0, order: 2 }] } // 10 min high intensity
+    ]},
+  ];
+
+  for (const daySplit of sampleSplit) {
+    for (const workout of daySplit.workouts) {
+      for (const set of workout.sets) {
+        await client.query(
+          `INSERT INTO split_sets (day_of_week, exercise_id, order_num, reps, load, rest)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [daySplit.day, exIds[workout.ex], set.order, set.reps, set.load, set.rest]
+        );
+      }
+    }
+  }
+
+  // Create logs for the past 2 days
+  const todayStr = getTodayInEst();
+  const today = new Date(`${todayStr}T00:00:00`); // Ensure parsing is consistent
+  const dates = [new Date(today), new Date(today)];
+  dates[0].setDate(today.getDate() - 2);
+  dates[1].setDate(today.getDate() - 1);
+  const dateStrings = dates.map(d => format(d, 'yyyy-MM-dd'));
+
+  for (const dateStr of dateStrings) {
+    const logId = await ensureDay(dateStr);
+    const dow = new Date(dateStr).getDay();
+    const daySplit = sampleSplit.find(s => s.day === dow);
+    if (daySplit) {
+      // Add planned sets
+      for (const workout of daySplit.workouts) {
+        for (const set of workout.sets) {
+          const planRes = await client.query(
+            `INSERT INTO planned_sets (log_id, exercise_id, order_num, reps, load, rest)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+            [logId, exIds[workout.ex], set.order, set.reps, set.load, set.rest]
+          );
+          // Add a completed set for some of the planned sets
+          if (Math.random() > 0.3) { // ~70% chance to complete a set
+            await client.query(
+              `INSERT INTO completed_sets (log_id, exercise_id, planned_set_id, reps_done, load_done)
+               VALUES ($1, $2, $3, $4, $5)`,
+              [logId, exIds[workout.ex], planRes.rows[0].id, set.reps - Math.floor(Math.random() * 2), set.load]
+            );
+          }
+        }
+      }
+    }
+  }
 }
 
 module.exports = {
