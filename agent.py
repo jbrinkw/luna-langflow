@@ -161,6 +161,8 @@ def create_agent() -> Agent:
             tools.new_daily_plan,
             tools.update_summary,
             tools.get_recent_history,
+            tools.set_weekly_split_day,
+            tools.get_weekly_split,
             tools.run_sql,
             tools.arbitrary_update,
             tools.set_timer,

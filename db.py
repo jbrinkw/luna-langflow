@@ -45,6 +45,17 @@ CREATE TABLE tracked_exercises (
     exercise VARCHAR(255) PRIMARY KEY
 );
 
+CREATE TABLE split_sets (
+    id SERIAL PRIMARY KEY,
+    day_of_week INTEGER NOT NULL,
+    exercise_id INTEGER REFERENCES exercises(id),
+    order_num INTEGER NOT NULL,
+    reps INTEGER NOT NULL,
+    load REAL NOT NULL,
+    rest INTEGER DEFAULT 60
+);
+CREATE INDEX IF NOT EXISTS ix_split_order ON split_sets (day_of_week, order_num);
+
 CREATE TABLE exercises (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) UNIQUE NOT NULL

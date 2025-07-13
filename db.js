@@ -108,6 +108,13 @@ async function ensureDay(dateStr) {
   }
 }
 
+async function ensureTodayPlan() {
+  const today = new Date().toISOString().slice(0, 10);
+  const logId = await ensureDay(today);
+  await applySplitIfEmpty(logId, today);
+  return logId;
+}
+
 function generateUuid() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     const r = Math.random() * 16 | 0;
@@ -471,6 +478,7 @@ async function populateSample(client) {
 module.exports = {
   initDb,
   ensureDay,
+  ensureTodayPlan,
   getAllDays,
   getDay,
   addPlan,

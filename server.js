@@ -15,6 +15,7 @@ app.use(express.static('.'));
 
 app.get('/api/days', async (req, res) => {
   try {
+    await db.ensureTodayPlan();
     const days = await db.getAllDays();
     res.json(days);
   } catch (error) {

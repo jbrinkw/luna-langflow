@@ -15,6 +15,16 @@ def get_corrected_time():
 MAX_LOAD = 2000
 MAX_REPS = 100
 
+DAY_MAP = {
+    "sunday": 0,
+    "monday": 1,
+    "tuesday": 2,
+    "wednesday": 3,
+    "thursday": 4,
+    "friday": 5,
+    "saturday": 6,
+}
+
 
 def _get_exercise_id(conn, name: str) -> int:
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -335,6 +345,79 @@ def get_recent_history(days: int) -> List[Dict[str, Any]]:
     return rows
 
 
+@function_tool(strict_mode=False)
+def set_weekly_split_day(day: str, items: List[Dict[str, Any]]):
+    """Replace the weekly split plan for the specified day.
+
+    Parameters:
+    - day (str): Day of week (e.g., "monday", "tuesday")
+    - items: list of planned sets with keys exercise, reps, load, order, rest (optional)
+
+    Example:
+    set_weekly_split_day("monday", [{"exercise": "bench press", "reps": 10, "load": 135, "order": 1}])
+
+    Returns success message with number of sets stored.
+    """
+    key = day.lower()
+    if key not in DAY_MAP:
+        raise ValueError("invalid day")
+    day_num = DAY_MAP[key]
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM split_sets WHERE day_of_week = %s", (day_num,))
+        for item in items:
+            reps = int(item["reps"])
+            load = float(item["load"])
+            rest = int(item.get("rest", 60))
+            if not (1 <= reps <= MAX_REPS):
+                raise ValueError("reps out of range")
+            if not (0 <= load <= MAX_LOAD):
+                raise ValueError("load out of range")
+            if not (0 <= rest <= 600):
+                raise ValueError("rest out of range")
+            ex_id = _get_exercise_id(conn, item["exercise"])
+            order_num = int(item.get("order", item.get("order_num", 1)))
+            cur.execute(
+                "INSERT INTO split_sets (day_of_week, exercise_id, order_num, reps, load, rest) VALUES (%s,%s,%s,%s,%s,%s)",
+                (day_num, ex_id, order_num, reps, load, rest),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    return f"split updated for {key} with {len(items)} sets"
+
+
+@function_tool(strict_mode=False)
+def get_weekly_split(day: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Retrieve the weekly split plan.
+
+    Parameters:
+    - day (str, optional): Specific day name to fetch. If omitted, returns all days.
+
+    Returns list of sets with exercise, reps, load, rest and order_num.
+    """
+    conn = get_connection()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        if day is None:
+            cur.execute(
+                "SELECT day_of_week, e.name as exercise, reps, load, rest, order_num FROM split_sets ss JOIN exercises e ON ss.exercise_id = e.id ORDER BY day_of_week, order_num"
+            )
+        else:
+            key = day.lower()
+            if key not in DAY_MAP:
+                raise ValueError("invalid day")
+            cur.execute(
+                "SELECT e.name as exercise, reps, load, rest, order_num FROM split_sets ss JOIN exercises e ON ss.exercise_id = e.id WHERE day_of_week = %s ORDER BY order_num",
+                (DAY_MAP[key],),
+            )
+        rows = [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
+    return rows
+
+
 def _execute_sql(query: str, params: Optional[Dict[str, Any]] = None, confirm: bool = False):
     """Internal SQL execution function"""
     if params is None:
@@ -518,6 +601,8 @@ __all__ = [
     "complete_planned_set",
     "update_summary",
     "get_recent_history",
+    "set_weekly_split_day",
+    "get_weekly_split",
     "run_sql",
     "arbitrary_update",
     "set_timer",
